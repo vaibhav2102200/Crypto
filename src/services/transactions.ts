@@ -1,5 +1,5 @@
-import { collection, addDoc, query, where, orderBy, limit, getDocs, Timestamp } from 'firebase/firestore'
-import { db } from '../config/firebase'
+import { mongoDBService } from './mongodb'
+import type { Transaction as MongoDBTransaction } from './api'
 
 export interface Transaction {
   id?: string
@@ -14,16 +14,28 @@ export interface Transaction {
   txHash?: string
   toAddress?: string
   fromAddress?: string
+  orderId?: string
+  paymentId?: string
 }
 
 export class TransactionService {
   static async logTransaction(transaction: Omit<Transaction, 'id' | 'timestamp'>): Promise<string> {
     try {
-      const docRef = await addDoc(collection(db, 'transactions'), {
-        ...transaction,
-        timestamp: Timestamp.now()
-      })
-      return docRef.id
+      const mongoTransaction: Omit<MongoDBTransaction, '_id'> = {
+        userId: transaction.userId,
+        type: transaction.type as 'deposit' | 'withdraw' | 'send' | 'receive',
+        amount: transaction.amount,
+        currency: transaction.currency,
+        description: transaction.description,
+        status: transaction.status as 'pending' | 'completed' | 'failed',
+        orderId: transaction.orderId,
+        paymentId: transaction.paymentId,
+        txHash: transaction.txHash,
+        timestamp: new Date()
+      }
+
+      const result = await mongoDBService.createTransaction(mongoTransaction)
+      return result._id?.toString() || ''
     } catch (error) {
       console.error('Error logging transaction:', error)
       throw error
@@ -36,33 +48,25 @@ export class TransactionService {
     limitCount: number = 50
   ): Promise<Transaction[]> {
     try {
-      // Use a simpler query that doesn't require composite indexes
-      const q = query(
-        collection(db, 'transactions'),
-        where('userId', '==', userId),
-        limit(limitCount * 2) // Get more to filter client-side
+      const mongoTransactions = await mongoDBService.getUserTransactions(
+        userId,
+        transactionType,
+        limitCount
       )
 
-      const querySnapshot = await getDocs(q)
-      const transactions: Transaction[] = []
-
-      querySnapshot.forEach((doc) => {
-        const data = doc.data()
-        const transaction = {
-          id: doc.id,
-          ...data,
-          timestamp: data.timestamp?.toDate() || new Date()
-        } as Transaction
-
-        // Filter by type if specified
-        if (!transactionType || transaction.type === transactionType) {
-          transactions.push(transaction)
-        }
-      })
-
-      // Sort by timestamp descending and limit
-      transactions.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
-      return transactions.slice(0, limitCount)
+      return mongoTransactions.map(mongoTx => ({
+        id: mongoTx._id?.toString(),
+        userId: mongoTx.userId,
+        type: mongoTx.type as 'deposit' | 'withdrawal' | 'send' | 'receive' | 'transfer',
+        amount: mongoTx.amount,
+        currency: mongoTx.currency,
+        description: mongoTx.description,
+        status: mongoTx.status as 'pending' | 'completed' | 'failed' | 'processing',
+        timestamp: mongoTx.timestamp,
+        txHash: mongoTx.txHash,
+        orderId: mongoTx.orderId,
+        paymentId: mongoTx.paymentId
+      }))
     } catch (error) {
       console.error('Error fetching transactions:', error)
       // Return empty array instead of throwing to prevent app crash
@@ -84,7 +88,7 @@ export class TransactionService {
     
     // Combine and sort by timestamp
     const allTransfers = [...sends, ...receives]
-    allTransfers.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+    allTransfers.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
     
     return allTransfers.slice(0, limitCount)
   }
@@ -102,9 +106,10 @@ export class TransactionService {
     return `${amount} ${currency}`
   }
 
-  static formatDate(timestamp: Date): string {
+  static formatDate(timestamp: Date | string): string {
+    const date = timestamp instanceof Date ? timestamp : new Date(timestamp)
     const now = new Date()
-    const diffInHours = (now.getTime() - timestamp.getTime()) / (1000 * 60 * 60)
+    const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60)
 
     if (diffInHours < 1) {
       return 'Just now'
@@ -112,13 +117,13 @@ export class TransactionService {
       const hours = Math.floor(diffInHours)
       return `${hours} hour${hours > 1 ? 's' : ''} ago`
     } else if (diffInHours < 48) {
-      return 'Yesterday, ' + timestamp.toLocaleTimeString('en-US', {
+      return 'Yesterday, ' + date.toLocaleTimeString('en-US', {
         hour: 'numeric',
         minute: '2-digit',
         hour12: true
       })
     } else {
-      return timestamp.toLocaleDateString('en-US', {
+      return date.toLocaleDateString('en-US', {
         month: 'short',
         day: 'numeric',
         hour: 'numeric',

@@ -354,7 +354,7 @@ const Withdraw: React.FC = () => {
                 {transaction.description}
               </p>
               <p style={{ fontSize: '0.8rem', color: '#999', margin: 0 }}>
-                {transaction.timestamp.toLocaleDateString()} {transaction.timestamp.toLocaleTimeString()}
+                {new Date(transaction.timestamp).toLocaleDateString()} {new Date(transaction.timestamp).toLocaleTimeString()}
               </p>
             </div>
             <div style={{

@@ -123,7 +123,7 @@ const History: React.FC = () => {
     const csvContent = [
       ['Date', 'Type', 'Amount', 'Currency', 'Description', 'Status'],
       ...filteredTransactions.map(t => [
-        t.timestamp.toISOString().split('T')[0],
+        new Date(t.timestamp).toISOString().split('T')[0],
         t.type,
         t.amount.toString(),
         t.currency,
@@ -223,10 +223,10 @@ const History: React.FC = () => {
     }}>
       <div>
         <p style={{ fontWeight: '600', margin: 0, fontSize: '0.9rem' }}>
-          {transaction.timestamp.toLocaleDateString()}
+          {new Date(transaction.timestamp).toLocaleDateString()}
         </p>
         <p style={{ fontSize: '0.8rem', color: '#666', margin: 0 }}>
-          {transaction.timestamp.toLocaleTimeString()}
+          {new Date(transaction.timestamp).toLocaleTimeString()}
         </p>
       </div>
       <div>

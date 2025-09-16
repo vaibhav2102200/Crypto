@@ -1,6 +1,6 @@
 import { CASHFREE_CONFIG } from '../config/cashfree'
-import { auth, db } from '../config/firebase'
-import { collection, addDoc, doc, getDoc, updateDoc } from 'firebase/firestore'
+import { auth } from '../config/firebase'
+import { mongoDBService } from './mongodb'
 import toast from 'react-hot-toast'
 
 declare global {
@@ -383,32 +383,24 @@ export class CashfreeManager {
   private async handlePaymentSuccess(orderId: string, paymentId: string, amount: number, currency: string, userId: string, status: string, description: string): Promise<void> {
     try {
       // Log transaction
-      await addDoc(collection(db, 'transactions'), {
+      await mongoDBService.createTransaction({
         userId,
         type: 'deposit',
         amount,
         currency,
         description,
-        status,
+        status: status as 'completed',
         orderId,
         paymentId,
         timestamp: new Date()
       })
 
       // Update user's INR balance
-      const userRef = doc(db, 'users', userId)
-      const userSnap = await getDoc(userRef)
-      if (userSnap.exists()) {
-        const currentBalance = userSnap.data().inrBalance || 0
-        await updateDoc(userRef, {
-          inrBalance: currentBalance + amount
-        })
-        console.log(`User ${userId} INR balance updated by ${amount}. New balance: ${currentBalance + amount}`)
-        // Dispatch a custom event to notify components to refresh balances
-        window.dispatchEvent(new Event('balanceUpdated'))
-      } else {
-        console.error(`User ${userId} not found for balance update.`)
-      }
+      await mongoDBService.updateUserBalance(userId, currency, amount)
+      console.log(`User ${userId} ${currency} balance updated by ${amount}`)
+      
+      // Dispatch a custom event to notify components to refresh balances
+      window.dispatchEvent(new Event('balanceUpdated'))
     } catch (error) {
       console.error('Error handling payment success:', error)
       toast.error('Failed to update balance or log transaction.')
@@ -419,13 +411,13 @@ export class CashfreeManager {
     try {
       // Log failed transaction
       const userId = auth.currentUser?.uid || 'unknown'
-      await addDoc(collection(db, 'transactions'), {
+      await mongoDBService.createTransaction({
         userId,
         type: 'deposit',
         amount: this.currentOrder?.order_amount || 0,
         currency: 'INR',
         description: `INR deposit failed: ${errorMessage}`,
-        status,
+        status: status as 'failed',
         orderId,
         timestamp: new Date()
       })

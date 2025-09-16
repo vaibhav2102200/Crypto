@@ -6,13 +6,15 @@ import {
   signOut,
   onAuthStateChanged
 } from 'firebase/auth'
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore'
-import { auth, db } from '../config/firebase'
+import { auth } from '../config/firebase'
+import { mongoDBService } from '../services/mongodb'
+import type { User as MongoDBUser } from '../services/mongodb'
 import toast from 'react-hot-toast'
 
 export interface UserProfile {
   userId: string
   email: string
+  displayName?: string
   walletAddress: string
   inrBalance: number
   cryptoBalances: {
@@ -65,39 +67,52 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }
 
   const createUserProfile = async (user: User): Promise<UserProfile> => {
+    const mongoUser = await mongoDBService.initializeUserIfNotExists(
+      user.uid,
+      user.email || '',
+      user.displayName || undefined
+    )
+
     const profile: UserProfile = {
       userId: user.uid,
-      email: user.email || '',
+      email: mongoUser.email,
+      displayName: mongoUser.displayName,
       walletAddress: generateWalletAddress(),
-      inrBalance: 0,
-      cryptoBalances: {
-        BTC: 0,
-        USDT: 0,
-        BXC: 0
-      },
+      inrBalance: mongoUser.inrBalance,
+      cryptoBalances: mongoUser.cryptoBalances,
       preferences: {
         emailNotifications: true,
         pushNotifications: false,
         autoRefresh: true
       },
-      createdAt: new Date(),
-      updatedAt: new Date()
+      createdAt: mongoUser.createdAt,
+      updatedAt: mongoUser.updatedAt
     }
 
-    await setDoc(doc(db, 'users', user.uid), profile)
     return profile
   }
 
   const loadUserProfile = async (user: User): Promise<void> => {
     try {
-      const userDoc = await getDoc(doc(db, 'users', user.uid))
-      if (userDoc.exists()) {
-        const data = userDoc.data()
-        setUserProfile({
-          ...data,
-          createdAt: data.createdAt?.toDate() || new Date(),
-          updatedAt: data.updatedAt?.toDate() || new Date()
-        } as UserProfile)
+      const mongoUser = await mongoDBService.getUserByUid(user.uid)
+      
+      if (mongoUser) {
+        const profile: UserProfile = {
+          userId: user.uid,
+          email: mongoUser.email,
+          displayName: mongoUser.displayName,
+          walletAddress: generateWalletAddress(),
+          inrBalance: mongoUser.inrBalance,
+          cryptoBalances: mongoUser.cryptoBalances,
+          preferences: {
+            emailNotifications: true,
+            pushNotifications: false,
+            autoRefresh: true
+          },
+          createdAt: mongoUser.createdAt,
+          updatedAt: mongoUser.updatedAt
+        }
+        setUserProfile(profile)
       } else {
         const newProfile = await createUserProfile(user)
         setUserProfile(newProfile)
@@ -146,12 +161,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!currentUser || !userProfile) return
 
     try {
+      const mongoUpdates: Partial<MongoDBUser> = {}
+      
+      if (updates.inrBalance !== undefined) {
+        mongoUpdates.inrBalance = updates.inrBalance
+      }
+      if (updates.cryptoBalances) {
+        mongoUpdates.cryptoBalances = updates.cryptoBalances
+      }
+      if (updates.email) {
+        mongoUpdates.email = updates.email
+      }
+      if (updates.displayName) {
+        mongoUpdates.displayName = updates.displayName
+      }
+
+      await mongoDBService.updateUser(currentUser.uid, mongoUpdates)
+      
       const updatedProfile = {
         ...updates,
         updatedAt: new Date()
       }
       
-      await updateDoc(doc(db, 'users', currentUser.uid), updatedProfile)
       setUserProfile(prev => prev ? { ...prev, ...updatedProfile } : null)
     } catch (error) {
       console.error('Error updating profile:', error)

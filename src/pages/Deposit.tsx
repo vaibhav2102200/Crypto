@@ -212,9 +212,10 @@ const Deposit: React.FC = () => {
             return `${amount} ${currency}`
           }
 
-          const formatDate = (timestamp: Date) => {
+          const formatDate = (timestamp: Date | string) => {
+            const date = timestamp instanceof Date ? timestamp : new Date(timestamp)
             const now = new Date()
-            const diffInHours = (now.getTime() - timestamp.getTime()) / (1000 * 60 * 60)
+            const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60)
             
             if (diffInHours < 1) {
               return 'Just now'
@@ -222,13 +223,13 @@ const Deposit: React.FC = () => {
               const hours = Math.floor(diffInHours)
               return `${hours} hour${hours > 1 ? 's' : ''} ago`
             } else if (diffInHours < 48) {
-              return 'Yesterday, ' + timestamp.toLocaleTimeString('en-US', { 
+              return 'Yesterday, ' + date.toLocaleTimeString('en-US', { 
                 hour: 'numeric', 
                 minute: '2-digit',
                 hour12: true 
               })
             } else {
-              return timestamp.toLocaleDateString('en-US', { 
+              return date.toLocaleDateString('en-US', { 
                 month: 'short', 
                 day: 'numeric',
                 hour: 'numeric', 

@@ -3,8 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useCryptoPrices } from '../contexts/CryptoPriceContext'
 import { TransactionService, Transaction } from '../services/transactions'
-import { collection, query, where, getDocs, doc, getDoc, updateDoc } from 'firebase/firestore'
-import { db } from '../config/firebase'
+import { apiService } from '../services/api'
 import toast from 'react-hot-toast'
 
 const Send: React.FC = () => {
@@ -63,16 +62,8 @@ const Send: React.FC = () => {
 
   const findUserByEmail = async (email: string) => {
     try {
-      const usersRef = collection(db, 'users')
-      const q = query(usersRef, where('email', '==', email))
-      const querySnapshot = await getDocs(q)
-      
-      if (querySnapshot.empty) {
-        return null
-      }
-      
-      const userDoc = querySnapshot.docs[0]
-      return { id: userDoc.id, ...userDoc.data() }
+      const user = await apiService.findUserByEmail(email)
+      return user
     } catch (error) {
       console.error('Error finding user:', error)
       return null
@@ -125,12 +116,8 @@ const Send: React.FC = () => {
       await updateUserProfile({ inrBalance: newSenderBalance })
 
       // Add to recipient
-      const recipientRef = doc(db, 'users', recipient.id)
-      const recipientDoc = await getDoc(recipientRef)
-      if (recipientDoc.exists()) {
-        const recipientData = recipientDoc.data()
-        const newRecipientBalance = (recipientData.inrBalance || 0) + amount
-        await updateDoc(recipientRef, { inrBalance: newRecipientBalance })
+      if (recipient.uid) {
+        await apiService.updateUserBalance(recipient.uid, 'INR', amount)
       }
 
       // Log transactions for both users
@@ -144,7 +131,7 @@ const Send: React.FC = () => {
       })
 
       await TransactionService.logTransaction({
-        userId: recipient.id,
+        userId: recipient.uid,
         type: 'transfer',
         amount: amount, // Positive for recipient
         currency: 'INR',
@@ -219,19 +206,8 @@ const Send: React.FC = () => {
       })
 
       // Add to recipient
-      const recipientRef = doc(db, 'users', recipient.id)
-      const recipientDoc = await getDoc(recipientRef)
-      if (recipientDoc.exists()) {
-        const recipientData = recipientDoc.data()
-        const recipientCryptoBalances = recipientData.cryptoBalances || { BTC: 0, USDT: 0, BXC: 0 }
-        const newRecipientCryptoBalance = (recipientCryptoBalances[selectedCrypto] || 0) + amount
-        
-        await updateDoc(recipientRef, {
-          cryptoBalances: {
-            ...recipientCryptoBalances,
-            [selectedCrypto]: newRecipientCryptoBalance
-          }
-        })
+      if (recipient.uid) {
+        await apiService.updateUserBalance(recipient.uid, selectedCrypto, amount)
       }
 
       // Log transactions for both users
@@ -245,7 +221,7 @@ const Send: React.FC = () => {
       })
 
       await TransactionService.logTransaction({
-        userId: recipient.id,
+        userId: recipient.uid,
         type: 'transfer',
         amount: amount, // Positive for recipient
         currency: selectedCrypto,
@@ -296,7 +272,7 @@ const Send: React.FC = () => {
                 {transaction.description}
               </p>
               <p style={{ fontSize: '0.8rem', color: '#999', margin: 0 }}>
-                {transaction.timestamp.toLocaleDateString()} {transaction.timestamp.toLocaleTimeString()}
+                {new Date(transaction.timestamp).toLocaleDateString()} {new Date(transaction.timestamp).toLocaleTimeString()}
               </p>
             </div>
             <div style={{
