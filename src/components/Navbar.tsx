@@ -1,13 +1,29 @@
 import React, { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { useWeb3 } from '../contexts/Web3Context'
 import AuthModal from './AuthModal'
 
 const Navbar: React.FC = () => {
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [authType, setAuthType] = useState<'login' | 'signup'>('login')
   const { currentUser, logout } = useAuth()
+  const { account, isConnected } = useWeb3()
   const location = useLocation()
+
+  // Admin credentials (same as AdminWithdrawals.tsx)
+  const ADMIN_CREDENTIALS = {
+    uid: "zgtQXvwBhMbHR4FcdduoNF7sbhl1",
+    email: "vaibhav.admin@gmail.com",
+    displayName: "Vaibhav Admin",
+    password: "Vaibhav1234"
+  }
+
+  // Check if current user is admin
+  const isAdmin = currentUser && currentUser.uid === ADMIN_CREDENTIALS.uid
+  
+  // Check if admin wallet is connected (specific wallet address)
+  const isAdminWalletConnected = isAdmin && isConnected && account === "0x95c150341C0B26D7C6d3b62a718923645250D60d"
 
   const handleLogout = async () => {
     try {
@@ -157,6 +173,28 @@ const Navbar: React.FC = () => {
                 >
                   👤 Profile
                 </Link>
+                {/* Admin Button - Only show when admin is logged in and wallet is connected */}
+                {isAdminWalletConnected && (
+                  <Link 
+                    to="/admin-withdrawals" 
+                    className="hover-lift"
+                    style={{ 
+                      textDecoration: 'none', 
+                      color: isActive('/admin-withdrawals') ? '#ff6b6b' : '#ff6b6b',
+                      padding: '0.5rem 1rem',
+                      borderRadius: '12px',
+                      fontWeight: '600',
+                      fontSize: '0.9rem',
+                      background: isActive('/admin-withdrawals') ? 'rgba(255, 107, 107, 0.1)' : 'rgba(255, 107, 107, 0.1)',
+                      border: isActive('/admin-withdrawals') ? '1px solid rgba(255, 107, 107, 0.3)' : '1px solid rgba(255, 107, 107, 0.3)',
+                      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                      cursor: 'pointer',
+                      boxShadow: '0 4px 16px rgba(255, 107, 107, 0.2)'
+                    }}
+                  >
+                    👑 Admin
+                  </Link>
+                )}
                 <button 
                   onClick={handleLogout} 
                   className="btn-danger hover-lift"

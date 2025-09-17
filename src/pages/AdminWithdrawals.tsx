@@ -1,11 +1,18 @@
 import React, { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useWeb3 } from '../contexts/Web3Context'
-import { collection, getDocs, doc, updateDoc, deleteDoc, query, orderBy, limit } from 'firebase/firestore'
+import { collection, getDocs, doc, updateDoc, query, limit, where, addDoc } from 'firebase/firestore'
 import { db } from '../config/firebase'
-import { CONTRACT_CONFIG } from '../config/contracts'
+// import { CONTRACT_CONFIG } from '../config/contracts'
 import toast from 'react-hot-toast'
+
+// Admin credentials
+const ADMIN_CREDENTIALS = {
+  uid: "zgtQXvwBhMbHR4FcdduoNF7sbhl1",
+  email: "vaibhav.admin@gmail.com",
+  displayName: "Vaibhav Admin",
+  password: "Vaibhav1234"
+}
 
 interface PendingWithdrawal {
   id: string
@@ -23,34 +30,115 @@ interface PendingWithdrawal {
 const AdminWithdrawals: React.FC = () => {
   const [pendingWithdrawals, setPendingWithdrawals] = useState<PendingWithdrawal[]>([])
   const [loading, setLoading] = useState(true)
-  const [processing, setProcessing] = useState<string | null>(null)
-  const [contractBalances, setContractBalances] = useState<{[key: string]: string}>({})
-  const [tokenLoadAmount, setTokenLoadAmount] = useState('')
-  const [selectedToken, setSelectedToken] = useState('BXC')
+  
+  // Admin authentication state
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false)
+  const [adminLoginForm, setAdminLoginForm] = useState({
+    email: '',
+    password: ''
+  })
+  const [adminLoading, setAdminLoading] = useState(false)
 
-  const { currentUser } = useAuth()
+  // Contract state
+  const [ownerAddress, setOwnerAddress] = useState<string | null>(null)
+  const [isPaused, setIsPaused] = useState(false)
+  const [supportsPausedCheck, setSupportsPausedCheck] = useState(false)
+
+  const { currentUser, login, logout } = useAuth()
   const { account, isConnected, connectWallet, web3, getNetworkStatus } = useWeb3()
-  const navigate = useNavigate()
 
   useEffect(() => {
-    if (!currentUser) {
-      navigate('/')
-      return
+    // Check if current user is admin
+    if (currentUser && currentUser.uid === ADMIN_CREDENTIALS.uid) {
+      setIsAdminAuthenticated(true)
+      loadPendingWithdrawals()
+      loadContractOwner()
+      loadPausedStatus()
+    } else {
+      setIsAdminAuthenticated(false)
     }
-    loadPendingWithdrawals()
-    checkContractBalances()
-  }, [currentUser, navigate])
+  }, [currentUser])
+
+  // Auto-refresh every 30 seconds
+  useEffect(() => {
+    if (isAdminAuthenticated) {
+      const interval = setInterval(() => {
+        loadPendingWithdrawals()
+      }, 30000)
+      return () => clearInterval(interval)
+    }
+  }, [isAdminAuthenticated])
+
+  const handleAdminLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setAdminLoading(true)
+    
+    try {
+      await login(adminLoginForm.email, adminLoginForm.password)
+      toast.success('Login successful! Checking admin access...')
+    } catch (error: any) {
+      console.error('Admin login error:', error)
+      toast.error('Login failed: ' + (error.message || 'Invalid credentials'))
+    } finally {
+      setAdminLoading(false)
+    }
+  }
+
+  const handleAdminLogout = async () => {
+    try {
+      await logout()
+      setIsAdminAuthenticated(false)
+      setAdminLoginForm({ email: '', password: '' })
+      toast.success('Admin logged out successfully')
+    } catch (error) {
+      console.error('Logout error:', error)
+      toast.error('Error logging out')
+    }
+  }
+
+  const loadContractOwner = async () => {
+    try {
+      if (web3 && isConnected) {
+        setOwnerAddress('Contract Owner Address')
+      }
+    } catch (e) {
+      console.error('Failed to load contract owner:', e)
+    }
+  }
+
+  const loadPausedStatus = async () => {
+    try {
+      if (!supportsPausedCheck) {
+        return
+      }
+      setIsPaused(false)
+    } catch (e) {
+      setSupportsPausedCheck(false)
+    }
+  }
 
   const loadPendingWithdrawals = async () => {
     try {
       setLoading(true)
       const withdrawalsRef = collection(db, 'pending_withdrawals')
-      const q = query(withdrawalsRef, orderBy('createdAt', 'desc'), limit(50))
+      // Simplified query to avoid index requirement - just get all pending withdrawals
+      const q = query(
+        withdrawalsRef, 
+        where('status', '==', 'pending_admin_execution'),
+        limit(50)
+      )
       const querySnapshot = await getDocs(q)
       
       const withdrawals: PendingWithdrawal[] = []
       querySnapshot.forEach((doc) => {
         withdrawals.push({ id: doc.id, ...doc.data() } as PendingWithdrawal)
+      })
+      
+      // Sort by createdAt in JavaScript instead of Firestore
+      withdrawals.sort((a, b) => {
+        const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt)
+        const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt)
+        return dateB.getTime() - dateA.getTime()
       })
       
       setPendingWithdrawals(withdrawals)
@@ -62,81 +150,71 @@ const AdminWithdrawals: React.FC = () => {
     }
   }
 
-  const checkContractBalances = async () => {
-    if (!web3 || !isConnected) {
-      setContractBalances({})
-      return
-    }
-
+  const getRevertMessage = (error: any): string => {
     try {
-      const balances: {[key: string]: string} = {}
-      
-      // Check BXC balance
-      const bxcAddress = CONTRACT_CONFIG.contracts.bxc
-      const cryptoWalletAddress = CONTRACT_CONFIG.contracts.cryptoWallet
-
-      const bxcABI = [
-        {
-          "constant": true,
-          "inputs": [{"name": "_owner", "type": "address"}],
-          "name": "balanceOf",
-          "outputs": [{"name": "balance", "type": "uint256"}],
-          "type": "function" as const
-        }
-      ]
-
-      const bxcContract = new web3.eth.Contract(bxcABI, bxcAddress)
-      const bxcBalance = await bxcContract.methods.balanceOf(cryptoWalletAddress).call()
-      balances.BXC = parseFloat(web3.utils.fromWei(bxcBalance, 'ether')).toFixed(8)
-      
-      // For demo purposes, we'll show placeholder balances for BTC and USDT
-      balances.BTC = '0.00000000'
-      balances.USDT = '0.00'
-      
-      setContractBalances(balances)
-    } catch (error) {
-      console.error('Error checking contract balances:', error)
-      setContractBalances({ error: 'Error checking balances' })
-    }
+      if (!error) return 'Unknown error'
+      if (typeof error === 'string') return error
+      if (error.message) return error.message
+      if (error.reason) return error.reason
+      if (error.data) {
+        if (typeof error.data === 'string') return error.data
+        if (error.data.message) return error.data.message
+        if (error.data.reason) return error.data.reason
+        if (error.data.originalError?.message) return error.data.originalError.message
+      }
+      if (error.originalError?.message) return error.originalError.message
+    } catch (e) {}
+    return 'execution reverted'
   }
 
-  const processWithdrawal = async (withdrawal: PendingWithdrawal) => {
-    if (!web3 || !account) {
-      toast.error('Please connect your MetaMask wallet')
-      return
-    }
-
+  const executeWithdrawal = async (withdrawal: PendingWithdrawal) => {
     try {
-      setProcessing(withdrawal.id)
-      toast.loading('Processing withdrawal...', { id: 'process-withdrawal' })
+      if (!web3 || !account) {
+        toast.error('Please connect admin wallet first')
+        return
+      }
 
-      // For demo purposes, we'll simulate the transaction
-      // In a real implementation, you would interact with the smart contract
-      console.log('Processing withdrawal:', withdrawal)
-      
-      // Simulate processing time
+      if (ownerAddress && account.toLowerCase() !== ownerAddress.toLowerCase()) {
+        toast.error('Connect the contract owner wallet to execute withdrawals')
+        return
+      }
+
+      toast.loading('Executing withdrawal...', { id: 'execute-withdrawal' })
+
+      // Simulate transaction
       await new Promise(resolve => setTimeout(resolve, 2000))
 
       // Update withdrawal status
-      const withdrawalRef = doc(db, 'pending_withdrawals', withdrawal.id)
-      await updateDoc(withdrawalRef, {
-        status: 'completed',
-        processedAt: new Date(),
-        processedBy: account,
-        txHash: '0x' + Math.random().toString(16).substr(2, 64) // Demo transaction hash
+      await updateDoc(doc(db, 'pending_withdrawals', withdrawal.id), {
+        status: 'executed',
+        executedAt: new Date(),
+        txHash: '0x' + Math.random().toString(16).substr(2, 64),
+        executedBy: account
       })
 
-      toast.dismiss('process-withdrawal')
-      toast.success(`Successfully processed ${withdrawal.cryptoAmount} ${withdrawal.crypto} withdrawal`)
-      
-      loadPendingWithdrawals()
-      checkContractBalances()
+      // Log transaction
+      await addDoc(collection(db, 'transactions'), {
+        userId: withdrawal.userId,
+        type: 'withdrawal',
+        currency: withdrawal.crypto,
+        amount: withdrawal.cryptoAmount,
+        inrAmount: withdrawal.inrAmount,
+        status: 'completed',
+        timestamp: new Date(),
+        txHash: '0x' + Math.random().toString(16).substr(2, 64),
+        toAddress: withdrawal.userAddress,
+        description: `INR to ${withdrawal.crypto} withdrawal`
+      })
+
+      toast.dismiss('execute-withdrawal')
+      toast.success('Withdrawal executed successfully!')
+      await loadPendingWithdrawals()
+
     } catch (error: any) {
-      console.error('Error processing withdrawal:', error)
-      toast.dismiss('process-withdrawal')
-      toast.error('Error processing withdrawal: ' + error.message)
-    } finally {
-      setProcessing(null)
+      const msg = getRevertMessage(error)
+      console.error('Withdrawal execution error:', { error, message: msg })
+      toast.dismiss('execute-withdrawal')
+      toast.error(`Failed to execute withdrawal: ${msg}`)
     }
   }
 
@@ -146,274 +224,360 @@ const AdminWithdrawals: React.FC = () => {
     }
 
     try {
-      setProcessing(withdrawal.id)
       toast.loading('Rejecting withdrawal...', { id: 'reject-withdrawal' })
 
-      // In a real implementation, you would refund the user's INR balance here
-      console.log('Rejecting withdrawal:', withdrawal)
+      await updateDoc(doc(db, 'pending_withdrawals', withdrawal.id), {
+        status: 'rejected',
+        rejectedAt: new Date(),
+        rejectedBy: account || 'admin'
+      })
 
-      // Delete the withdrawal request
-      await deleteDoc(doc(db, 'pending_withdrawals', withdrawal.id))
+      // Refund INR to user
+      const userDoc = await getDocs(query(collection(db, 'users'), where('uid', '==', withdrawal.userId)))
+      if (!userDoc.empty) {
+        const userData = userDoc.docs[0].data()
+        const newInrBalance = (userData.inrBalance || 0) + withdrawal.inrAmount
+        
+        await updateDoc(doc(db, 'users', userDoc.docs[0].id), {
+          inrBalance: newInrBalance,
+          updatedAt: new Date()
+        })
+      }
 
       toast.dismiss('reject-withdrawal')
-      toast.success('Withdrawal rejected and user refunded')
-      
-      loadPendingWithdrawals()
+      toast.success('Withdrawal rejected and INR refunded')
+      await loadPendingWithdrawals()
+
     } catch (error: any) {
-      console.error('Error rejecting withdrawal:', error)
+      console.error('Withdrawal rejection error:', error)
       toast.dismiss('reject-withdrawal')
-      toast.error('Error rejecting withdrawal: ' + error.message)
-    } finally {
-      setProcessing(null)
+      toast.error('Failed to reject withdrawal: ' + error.message)
     }
   }
 
-  const loadTokensToContract = async () => {
-    const amount = parseFloat(tokenLoadAmount)
-    
-    if (!amount || amount <= 0) {
-      toast.error('Please enter a valid amount')
-      return
-    }
-
-    if (!web3 || !account) {
-      toast.error('Please connect your MetaMask wallet')
-      return
-    }
-
-    try {
-      setProcessing('load-tokens')
-      toast.loading('Loading tokens to contract...', { id: 'load-tokens' })
-
-      // For demo purposes, we'll simulate loading tokens
-      console.log(`Loading ${amount} ${selectedToken} tokens to contract`)
-      
-      // Simulate processing time
-      await new Promise(resolve => setTimeout(resolve, 3000))
-
-      toast.dismiss('load-tokens')
-      toast.success(`Successfully loaded ${amount} ${selectedToken} tokens to contract`)
-      
-      setTokenLoadAmount('')
-      checkContractBalances()
-    } catch (error: any) {
-      console.error('Error loading tokens:', error)
-      toast.dismiss('load-tokens')
-      toast.error('Error loading tokens: ' + error.message)
-    } finally {
-      setProcessing(null)
-    }
-  }
-
-  return (
-    <div style={{ padding: '2rem 0' }}>
-      <div className="container">
-        <div style={{ marginBottom: '2rem' }}>
-          <h1 style={{ fontSize: '2.5rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Admin: Withdrawal Management</h1>
-          <p style={{ color: '#666', fontSize: '1.1rem' }}>Manage pending cryptocurrency withdrawals</p>
-        </div>
-
-        {/* Wallet Connection Status */}
-        <div className="card" style={{ marginBottom: '2rem' }}>
-          <h3 style={{ marginBottom: '1rem' }}>Wallet Status</h3>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <p style={{ margin: 0, fontWeight: '600' }}>
-                Status: {isConnected ? `Connected (${account?.slice(0, 6)}...${account?.slice(-4)})` : 'Not Connected'}
-              </p>
-              <p style={{ margin: 0, color: '#666', fontSize: '0.9rem' }}>
-                Network: {getNetworkStatus()}
-              </p>
-            </div>
-            {!isConnected && (
-              <button onClick={connectWallet} style={{ background: '#007bff', color: 'white', border: 'none' }}>
-                Connect Wallet
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Contract Balances */}
-        <div className="card" style={{ marginBottom: '2rem' }}>
-          <h3 style={{ marginBottom: '1rem' }}>Smart Contract Token Balances</h3>
-          <div className="grid grid-cols-3" style={{ gap: '1rem', marginBottom: '2rem' }}>
-            {Object.entries(contractBalances).map(([token, balance]) => (
-              <div key={token} className="card text-center">
-                <h4 style={{ margin: '0 0 0.5rem 0' }}>{token}</h4>
-                <p style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: 0, color: token === 'error' ? '#dc3545' : '#007bff' }}>
-                  {balance}
+  // Show admin login form if not authenticated
+  if (!isAdminAuthenticated) {
+    return (
+      <div style={{ padding: '2rem 0' }}>
+        <div className="container">
+          <div style={{ maxWidth: '400px', margin: '0 auto' }}>
+            <div className="card">
+              <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+                <h1 style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>
+                  🔐 Admin Login
+                </h1>
+                <p style={{ color: '#666', fontSize: '1rem' }}>
+                  Access the withdrawal management panel
                 </p>
               </div>
-            ))}
-          </div>
-
-          {/* Load Tokens Section */}
-          <div style={{ borderTop: '1px solid #eee', paddingTop: '1rem' }}>
-            <h4 style={{ marginBottom: '1rem' }}>Load Tokens to Contract</h4>
-            <div style={{ display: 'flex', gap: '1rem', alignItems: 'end' }}>
-              <div style={{ flex: 1 }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
-                  Select Token
-                </label>
-                <select
-                  value={selectedToken}
-                  onChange={(e) => setSelectedToken(e.target.value)}
-                  style={{ width: '100%' }}
+              
+              <form onSubmit={handleAdminLogin}>
+                <div style={{ marginBottom: '1rem' }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    value={adminLoginForm.email}
+                    onChange={(e) => setAdminLoginForm(prev => ({ ...prev, email: e.target.value }))}
+                    placeholder="Enter admin email"
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      border: '1px solid #ddd',
+                      borderRadius: '8px',
+                      fontSize: '1rem'
+                    }}
+                  />
+                </div>
+                
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+                    Password
+                  </label>
+                  <input
+                    type="password"
+                    value={adminLoginForm.password}
+                    onChange={(e) => setAdminLoginForm(prev => ({ ...prev, password: e.target.value }))}
+                    placeholder="Enter admin password"
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      border: '1px solid #ddd',
+                      borderRadius: '8px',
+                      fontSize: '1rem'
+                    }}
+                  />
+                </div>
+                
+                <button
+                  type="submit"
+                  disabled={adminLoading}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    background: '#007bff',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '1rem',
+                    fontWeight: '600',
+                    cursor: adminLoading ? 'not-allowed' : 'pointer',
+                    opacity: adminLoading ? 0.6 : 1
+                  }}
                 >
-                  <option value="BXC">BXC Token</option>
-                  <option value="USDT">USDT (BEP-20)</option>
-                  <option value="BTC">Bitcoin (Demo)</option>
-                </select>
+                  {adminLoading ? 'Logging in...' : 'Login as Admin'}
+                </button>
+              </form>
+              
+              <div style={{ marginTop: '1.5rem', padding: '1rem', background: '#f8f9fa', borderRadius: '8px' }}>
+                <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem', color: '#666' }}>
+                  Admin Credentials:
+                </h4>
+                <p style={{ margin: '0', fontSize: '0.8rem', color: '#666' }}>
+                  Email: {ADMIN_CREDENTIALS.email}<br/>
+                  Password: {ADMIN_CREDENTIALS.password}
+                </p>
               </div>
-              <div style={{ flex: 1 }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
-                  Amount
-                </label>
-                <input
-                  type="number"
-                  value={tokenLoadAmount}
-                  onChange={(e) => setTokenLoadAmount(e.target.value)}
-                  placeholder="Enter amount"
-                  min="0"
-                  step="0.00000001"
-                  style={{ width: '100%' }}
-                />
-              </div>
-              <button
-                onClick={loadTokensToContract}
-                disabled={processing === 'load-tokens' || !isConnected}
-                style={{
-                  padding: '0.75rem 1.5rem',
-                  background: '#28a745',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: (processing === 'load-tokens' || !isConnected) ? 'not-allowed' : 'pointer',
-                  opacity: (processing === 'load-tokens' || !isConnected) ? 0.6 : 1
-                }}
-              >
-                {processing === 'load-tokens' ? 'Loading...' : 'Load Tokens'}
-              </button>
             </div>
           </div>
         </div>
+      </div>
+    )
+  }
 
-        {/* Pending Withdrawals */}
-        <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-            <h3>Pending Withdrawals ({pendingWithdrawals.length})</h3>
-            <button
-              onClick={loadPendingWithdrawals}
+  // EXACT HTML DASHBOARD STRUCTURE
+  return (
+    <div style={{
+      maxWidth: '1200px',
+      margin: '2rem auto',
+      padding: '0 1rem'
+    }}>
+      {/* Admin Header - Exact match to HTML */}
+      <div style={{
+        background: 'linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%)',
+        color: 'white',
+        padding: '2rem',
+        borderRadius: '12px',
+        marginBottom: '2rem',
+        textAlign: 'center'
+      }}>
+        <h1 style={{ margin: '0 0 0.5rem 0', fontSize: '2rem', fontWeight: 'bold' }}>
+          <i className="fas fa-cog"></i> Admin Dashboard
+        </h1>
+        <p style={{ margin: '0 0 1rem 0', fontSize: '1.1rem' }}>
+          Process pending INR → Crypto withdrawals
+          {ownerAddress && (
+            <><br/>Contract Owner: <code>{ownerAddress}</code></>
+          )}
+        </p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <span style={{
+              padding: '0.25rem 0.75rem',
+              borderRadius: '20px',
+              fontSize: '0.875rem',
+              fontWeight: '500',
+              background: supportsPausedCheck ? (isPaused ? '#fecaca' : '#bbf7d0') : '#e5e7eb',
+              color: supportsPausedCheck ? (isPaused ? '#7f1d1d' : '#14532d') : '#374151',
+              marginLeft: '10px'
+            }}>
+              {supportsPausedCheck ? (isPaused ? 'PAUSED' : 'ACTIVE') : 'UNKNOWN'}
+            </span>
+          </div>
+          <button
+            onClick={handleAdminLogout}
+            style={{
+              padding: '0.5rem 1rem',
+              background: '#dc3545',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontSize: '0.9rem'
+            }}
+          >
+            🚪 Logout
+          </button>
+        </div>
+      </div>
+
+      {/* Wallet Connection - Exact match to HTML */}
+      <div style={{
+        background: '#f3f4f6',
+        border: '1px solid #d1d5db',
+        borderRadius: '8px',
+        padding: '1rem',
+        marginBottom: '2rem',
+        textAlign: 'center'
+      }}>
+        <div>
+          <span style={{
+            display: 'inline-block',
+            marginRight: '1rem',
+            fontWeight: '600',
+            color: isConnected ? '#10b981' : '#ef4444'
+          }}>
+            {isConnected ? `Connected: ${account?.slice(0, 6)}...${account?.slice(-4)}` : 'Not Connected'}
+          </span>
+          <span style={{ color: '#6b7280', marginRight: '1rem' }}>
+            {getNetworkStatus()}
+          </span>
+          {!isConnected && (
+            <button 
+              onClick={connectWallet}
               style={{
-                padding: '0.5rem 1rem',
                 background: '#007bff',
                 color: 'white',
                 border: 'none',
-                borderRadius: '8px',
+                padding: '0.5rem 1rem',
+                borderRadius: '6px',
                 cursor: 'pointer'
               }}
             >
-              🔄 Refresh
+              Connect Admin Wallet
             </button>
-          </div>
-
-          {loading ? (
-            <div style={{ textAlign: 'center', padding: '2rem' }}>
-              <p>Loading pending withdrawals...</p>
-            </div>
-          ) : pendingWithdrawals.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '2rem' }}>
-              <p style={{ color: '#666' }}>No pending withdrawals found.</p>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {pendingWithdrawals.map((withdrawal) => (
-                <div key={withdrawal.id} style={{
-                  padding: '1.5rem',
-                  border: '1px solid #eee',
-                  borderRadius: '8px',
-                  background: '#f8f9fa'
-                }}>
-                  <div className="grid grid-cols-2" style={{ gap: '2rem' }}>
-                    <div>
-                      <h4 style={{ margin: '0 0 1rem 0', fontSize: '1.1rem' }}>Withdrawal Details</h4>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.9rem' }}>
-                        <div><strong>User ID:</strong> {withdrawal.userId}</div>
-                        <div><strong>Crypto:</strong> {withdrawal.crypto}</div>
-                        <div><strong>Amount:</strong> {withdrawal.cryptoAmount} {withdrawal.crypto}</div>
-                        <div><strong>INR Value:</strong> ₹{withdrawal.inrAmount}</div>
-                        <div><strong>To Address:</strong> {withdrawal.userAddress}</div>
-                        <div><strong>Status:</strong> 
-                          <span style={{
-                            marginLeft: '0.5rem',
-                            padding: '0.25rem 0.5rem',
-                            borderRadius: '12px',
-                            fontSize: '0.8rem',
-                            background: withdrawal.status === 'pending_admin_execution' ? '#fff3cd' : '#f8d7da',
-                            color: withdrawal.status === 'pending_admin_execution' ? '#856404' : '#721c24'
-                          }}>
-                            {withdrawal.status}
-                          </span>
-                        </div>
-                        <div><strong>Created:</strong> {withdrawal.createdAt?.toDate?.()?.toLocaleString() || 'Unknown'}</div>
-                      </div>
-                    </div>
-                    
-                    <div>
-                      <h4 style={{ margin: '0 0 1rem 0', fontSize: '1.1rem' }}>Actions</h4>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                        <button
-                          onClick={() => processWithdrawal(withdrawal)}
-                          disabled={processing === withdrawal.id || !isConnected}
-                          style={{
-                            padding: '0.75rem',
-                            background: '#28a745',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '8px',
-                            cursor: (processing === withdrawal.id || !isConnected) ? 'not-allowed' : 'pointer',
-                            opacity: (processing === withdrawal.id || !isConnected) ? 0.6 : 1
-                          }}
-                        >
-                          {processing === withdrawal.id ? 'Processing...' : '✅ Process Withdrawal'}
-                        </button>
-                        
-                        <button
-                          onClick={() => rejectWithdrawal(withdrawal)}
-                          disabled={processing === withdrawal.id}
-                          style={{
-                            padding: '0.75rem',
-                            background: '#dc3545',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '8px',
-                            cursor: processing === withdrawal.id ? 'not-allowed' : 'pointer',
-                            opacity: processing === withdrawal.id ? 0.6 : 1
-                          }}
-                        >
-                          ❌ Reject & Refund
-                        </button>
-                        
-                        <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '0.5rem' }}>
-                          {withdrawal.crypto === 'BXC' && contractBalances.BXC && (
-                            <p style={{ margin: 0 }}>
-                              Contract Balance: {contractBalances.BXC} BXC
-                              {parseFloat(contractBalances.BXC) < withdrawal.cryptoAmount && (
-                                <span style={{ color: '#dc3545', display: 'block' }}>
-                                  ⚠️ Insufficient contract balance!
-                                </span>
-                              )}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
           )}
         </div>
+        {ownerAddress && account && account.toLowerCase() !== ownerAddress.toLowerCase() && (
+          <div style={{ marginTop: '0.5rem', color: '#dc3545', fontSize: '0.9rem' }}>
+            ⚠️ Connected wallet is NOT the contract owner. Execution will fail.
+          </div>
+        )}
+      </div>
+
+      {/* Pending Withdrawals - Exact match to HTML */}
+      <div style={{
+        background: 'white',
+        borderRadius: '12px',
+        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+        padding: '2rem'
+      }}>
+        <h2 style={{ margin: '0 0 2rem 0', fontSize: '1.5rem', fontWeight: 'bold' }}>
+          <i className="fas fa-list"></i> Pending Withdrawals
+        </h2>
+        
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
+            <i className="fas fa-spinner fa-spin" style={{ fontSize: '2rem', marginBottom: '1rem' }}></i>
+            <p>Loading pending withdrawals...</p>
+          </div>
+        ) : pendingWithdrawals.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '3rem', color: '#6b7280' }}>
+            <i className="fas fa-check-circle" style={{ fontSize: '3rem', color: '#10b981', marginBottom: '1rem' }}></i>
+            <h3>No pending withdrawals</h3>
+            <p>All withdrawal requests have been processed.</p>
+          </div>
+        ) : (
+          <div>
+            {pendingWithdrawals.map((withdrawal) => {
+              const createdAt = withdrawal.createdAt?.toDate?.() || new Date()
+              const formattedDate = createdAt.toLocaleString()
+              const isOwner = ownerAddress && account && (ownerAddress.toLowerCase() === account.toLowerCase())
+              const shouldDisable = (supportsPausedCheck && isPaused) || !isOwner
+              
+              return (
+                <div key={withdrawal.id} style={{
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '8px',
+                  padding: '1.5rem',
+                  marginBottom: '1rem',
+                  background: '#f9fafb'
+                }}>
+                  {/* Withdrawal Header */}
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: '1rem'
+                  }}>
+                    <h3 style={{ margin: 0, fontSize: '1.2rem' }}>INR → {withdrawal.crypto} Withdrawal</h3>
+                    <span style={{
+                      padding: '0.25rem 0.75rem',
+                      borderRadius: '20px',
+                      fontSize: '0.875rem',
+                      fontWeight: '500',
+                      background: withdrawal.status === 'pending_admin_execution' ? '#fef3c7' : '#fee2e2',
+                      color: withdrawal.status === 'pending_admin_execution' ? '#92400e' : '#991b1b'
+                    }}>
+                      {withdrawal.status.replace(/_/g, ' ').toUpperCase()}
+                    </span>
+                  </div>
+
+                  {/* Withdrawal Info Grid */}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                    gap: '1rem',
+                    marginBottom: '1rem'
+                  }}>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.25rem' }}>User ID</span>
+                      <span style={{ fontWeight: '600', color: '#1f2937' }}>{withdrawal.userId}</span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.25rem' }}>User Address</span>
+                      <span style={{ fontWeight: '600', color: '#1f2937' }}>{withdrawal.userAddress}</span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.25rem' }}>INR Amount</span>
+                      <span style={{ fontWeight: '600', color: '#1f2937' }}>₹{withdrawal.inrAmount.toLocaleString()}</span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.25rem' }}>Crypto Amount</span>
+                      <span style={{ fontWeight: '600', color: '#1f2937' }}>{withdrawal.cryptoAmount.toFixed(8)} {withdrawal.crypto}</span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.25rem' }}>Token Address</span>
+                      <span style={{ fontWeight: '600', color: '#1f2937' }}>{withdrawal.tokenAddress}</span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.25rem' }}>Created At</span>
+                      <span style={{ fontWeight: '600', color: '#1f2937' }}>{formattedDate}</span>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
+                    <button
+                      onClick={() => executeWithdrawal(withdrawal)}
+                      disabled={shouldDisable}
+                      style={{
+                        background: '#10b981',
+                        color: 'white',
+                        border: 'none',
+                        padding: '0.75rem 1.5rem',
+                        borderRadius: '6px',
+                        cursor: shouldDisable ? 'not-allowed' : 'pointer',
+                        transition: 'background 0.2s',
+                        opacity: shouldDisable ? 0.6 : 1
+                      }}
+                      title={!isOwner ? 'Connect the contract owner wallet' : 'Contract is paused'}
+                    >
+                      <i className="fas fa-check"></i> Execute Withdrawal
+                    </button>
+                    <button
+                      onClick={() => rejectWithdrawal(withdrawal)}
+                      style={{
+                        background: '#ef4444',
+                        color: 'white',
+                        border: 'none',
+                        padding: '0.75rem 1.5rem',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        transition: 'background 0.2s'
+                      }}
+                    >
+                      <i className="fas fa-times"></i> Reject
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
     </div>
   )
