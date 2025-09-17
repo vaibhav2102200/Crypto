@@ -23,7 +23,7 @@ const Navbar: React.FC = () => {
   const isAdmin = currentUser && currentUser.uid === ADMIN_CREDENTIALS.uid
   
   // Check if admin wallet is connected (specific wallet address)
-  const isAdminWalletConnected = isAdmin && isConnected && account === "0x95c150341C0B26D7C6d3b62a718923645250D60d"
+  const isAdminWalletConnected = isAdmin && isConnected && account === "0x33C28346859F0Fb8BC73005d14545046B7a1451fd"
 
   const handleLogout = async () => {
     try {

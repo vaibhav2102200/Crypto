@@ -161,7 +161,7 @@ const Landing: React.FC = () => {
       </section>
 
       {/* About Section */}
-      <section style={{ padding: '4rem 0', background: '#f8f9fa' }}>
+      <section style={{ padding: '4rem 0', background: 'transparent' }}>
         <div className="container">
           <h2 style={{ fontSize: '2.5rem', fontWeight: 'bold', textAlign: 'center', marginBottom: '3rem' }}>
             About Our Platform
@@ -207,7 +207,7 @@ const Landing: React.FC = () => {
       </section>
 
       {/* CTA Section */}
-      <section style={{ padding: '4rem 0', background: '#007bff', color: 'white', textAlign: 'center' }}>
+      <section style={{ padding: '4rem 0', background: 'transparent', color: 'white', textAlign: 'center' }}>
         <div className="container">
           <h2 style={{ fontSize: '2.5rem', fontWeight: 'bold', marginBottom: '1rem' }}>
             Ready to Start Trading?
