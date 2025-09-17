@@ -28,8 +28,8 @@ export const CRYPTO_WALLET_ABI = [
     "inputs": [],
     "name": "owner",
     "outputs": [{"internalType": "address", "name": "", "type": "address"}],
-    "stateMutability": "view",
-    "type": "function"
+    "stateMutability": "view" as const,
+    "type": "function" as const
   },
   {
     "inputs": [
@@ -39,8 +39,8 @@ export const CRYPTO_WALLET_ABI = [
     ],
     "name": "executeWithdrawalTo",
     "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
+    "stateMutability": "nonpayable" as const,
+    "type": "function" as const
   }
 ]
 
@@ -50,8 +50,8 @@ export const BXC_TOKEN_ABI = [
     "inputs": [{"internalType": "address", "name": "account", "type": "address"}],
     "name": "balanceOf",
     "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
-    "stateMutability": "view",
-    "type": "function"
+    "stateMutability": "view" as const,
+    "type": "function" as const
   },
   {
     "inputs": [
@@ -60,8 +60,8 @@ export const BXC_TOKEN_ABI = [
     ],
     "name": "transfer",
     "outputs": [{"internalType": "bool", "name": "", "type": "bool"}],
-    "stateMutability": "nonpayable",
-    "type": "function"
+    "stateMutability": "nonpayable" as const,
+    "type": "function" as const
   }
 ]
 
@@ -70,21 +70,21 @@ export const ERC20_ABI = [
     "inputs": [{"internalType": "address", "name": "account", "type": "address"}],
     "name": "balanceOf",
     "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
-    "stateMutability": "view",
-    "type": "function"
+    "stateMutability": "view" as const,
+    "type": "function" as const
   },
   {
     "inputs": [],
     "name": "decimals",
     "outputs": [{"internalType": "uint8", "name": "", "type": "uint8"}],
-    "stateMutability": "view",
-    "type": "function"
+    "stateMutability": "view" as const,
+    "type": "function" as const
   },
   {
     "inputs": [],
     "name": "symbol",
     "outputs": [{"internalType": "string", "name": "", "type": "string"}],
-    "stateMutability": "view",
-    "type": "function"
+    "stateMutability": "view" as const,
+    "type": "function" as const
   }
 ]

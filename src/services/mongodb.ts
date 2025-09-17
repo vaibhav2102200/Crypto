@@ -60,15 +60,15 @@ export class MongoDBService {
     return await apiService.getUserTransactions(userId, type, limit)
   }
 
-  async getTransactionById(transactionId: string): Promise<Transaction | null> {
+  async getTransactionById(_transactionId: string): Promise<Transaction | null> {
     // This would need to be implemented in the API if needed
     console.warn('getTransactionById not implemented in API service')
     return null
   }
 
   async updateTransactionStatus(
-    transactionId: string, 
-    status: Transaction['status']
+    _transactionId: string, 
+    _status: Transaction['status']
   ): Promise<void> {
     // This would need to be implemented in the API if needed
     console.warn('updateTransactionStatus not implemented in API service')

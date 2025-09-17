@@ -18,6 +18,7 @@ interface Web3ContextType {
   chainId: string | null
   contract: any
   connectWallet: () => Promise<void>
+  disconnectWallet: () => void
   switchToSepolia: () => Promise<void>
   getNetworkStatus: () => string
   validateUserBalances: () => Promise<void>
@@ -97,6 +98,14 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('Error connecting wallet:', error)
       toast.error('Failed to connect wallet')
     }
+  }
+
+  const disconnectWallet = () => {
+    setAccount(null)
+    setIsConnected(false)
+    setChainId(null)
+    setContract(null)
+    toast.success('Wallet disconnected')
   }
 
   const switchToSepolia = async () => {
@@ -241,6 +250,7 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
     chainId,
     contract,
     connectWallet,
+    disconnectWallet,
     switchToSepolia,
     getNetworkStatus,
     validateUserBalances,

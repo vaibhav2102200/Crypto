@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
-import toast from 'react-hot-toast'
 
 export interface CryptoPrices {
   BTC: number

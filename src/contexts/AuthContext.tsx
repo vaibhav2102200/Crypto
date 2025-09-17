@@ -15,6 +15,8 @@ export interface UserProfile {
   userId: string
   email: string
   displayName?: string
+  phone?: string
+  address?: string
   walletAddress: string
   inrBalance: number
   cryptoBalances: {

@@ -81,7 +81,7 @@ const AdminWithdrawals: React.FC = () => {
           "inputs": [{"name": "_owner", "type": "address"}],
           "name": "balanceOf",
           "outputs": [{"name": "balance", "type": "uint256"}],
-          "type": "function"
+          "type": "function" as const
         }
       ]
 

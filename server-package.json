@@ -1,0 +1,18 @@
+{
+  "name": "crypto-pay-server",
+  "version": "1.0.0",
+  "description": "Backend server for Crypto Pay application",
+  "main": "server.cjs",
+  "scripts": {
+    "start": "node server.cjs",
+    "dev": "node server.cjs"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "cors": "^2.8.5",
+    "mongodb": "^6.19.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

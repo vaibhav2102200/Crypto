@@ -27,7 +27,7 @@ const Profile: React.FC = () => {
 
   const { currentUser, userProfile, logout, refreshUserProfile } = useAuth()
   const { account, isConnected, connectWallet, disconnectWallet, getNetworkStatus } = useWeb3()
-  const { prices, convertToINR } = useCryptoPrices()
+  const { convertToINR } = useCryptoPrices()
   const navigate = useNavigate()
 
   useEffect(() => {
