@@ -62,6 +62,16 @@ export const BXC_TOKEN_ABI = [
     "outputs": [{"internalType": "bool", "name": "", "type": "bool"}],
     "stateMutability": "nonpayable" as const,
     "type": "function" as const
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {"indexed": true, "internalType": "address", "name": "from", "type": "address"},
+      {"indexed": true, "internalType": "address", "name": "to", "type": "address"},
+      {"indexed": false, "internalType": "uint256", "name": "value", "type": "uint256"}
+    ],
+    "name": "Transfer",
+    "type": "event" as const
   }
 ]
 
@@ -86,5 +96,39 @@ export const ERC20_ABI = [
     "outputs": [{"internalType": "string", "name": "", "type": "string"}],
     "stateMutability": "view" as const,
     "type": "function" as const
+  },
+  {
+    "inputs": [],
+    "name": "name",
+    "outputs": [{"internalType": "string", "name": "", "type": "string"}],
+    "stateMutability": "view" as const,
+    "type": "function" as const
+  },
+  {
+    "inputs": [],
+    "name": "totalSupply",
+    "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+    "stateMutability": "view" as const,
+    "type": "function" as const
+  },
+  {
+    "inputs": [
+      {"internalType": "address", "name": "to", "type": "address"},
+      {"internalType": "uint256", "name": "amount", "type": "uint256"}
+    ],
+    "name": "transfer",
+    "outputs": [{"internalType": "bool", "name": "", "type": "bool"}],
+    "stateMutability": "nonpayable" as const,
+    "type": "function" as const
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {"indexed": true, "internalType": "address", "name": "from", "type": "address"},
+      {"indexed": true, "internalType": "address", "name": "to", "type": "address"},
+      {"indexed": false, "internalType": "uint256", "name": "value", "type": "uint256"}
+    ],
+    "name": "Transfer",
+    "type": "event" as const
   }
 ]

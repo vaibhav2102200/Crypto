@@ -99,7 +99,7 @@ const AdminWithdrawals: React.FC = () => {
   const loadContractOwner = async () => {
     try {
       if (web3 && isConnected) {
-        setOwnerAddress('Contract Owner Address')
+        setOwnerAddress('0x76b16F59Cfab5DdaE5D149BE98E5d755F939572A')
       }
     } catch (e) {
       console.error('Failed to load contract owner:', e)
@@ -109,8 +109,8 @@ const AdminWithdrawals: React.FC = () => {
   const loadPausedStatus = async () => {
     try {
       if (!supportsPausedCheck) {
-        return
-      }
+      return
+    }
       setIsPaused(false)
     } catch (e) {
       setSupportsPausedCheck(false)
@@ -179,20 +179,65 @@ const AdminWithdrawals: React.FC = () => {
         return
       }
 
-      toast.loading('Executing withdrawal...', { id: 'execute-withdrawal' })
+      toast.loading('Executing withdrawal on blockchain...', { id: 'execute-withdrawal' })
 
-      // Simulate transaction
-      await new Promise(resolve => setTimeout(resolve, 2000))
+      // Import contract ABI and config
+      const { CONTRACT_CONFIG, CRYPTO_WALLET_ABI } = await import('../config/contracts')
+      
+      // Create contract instance
+      const contract = new web3.eth.Contract(CRYPTO_WALLET_ABI, CONTRACT_CONFIG.contracts.cryptoWallet)
+      
+      // Convert amount to Wei
+      const amountInWei = web3.utils.toWei(withdrawal.cryptoAmount.toString(), 'ether')
+      
+      console.log('Executing withdrawal:', {
+        userAddress: withdrawal.userAddress,
+        tokenAddress: withdrawal.tokenAddress,
+        amount: withdrawal.cryptoAmount,
+        amountInWei: amountInWei,
+        crypto: withdrawal.crypto
+      })
 
-      // Update withdrawal status
+      // Pre-check: ensure contract has enough token balance
+      const erc20ABI = [
+        {
+          "inputs": [{"internalType": "address", "name": "account", "type": "address"}],
+          "name": "balanceOf",
+          "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+          "stateMutability": "view" as const,
+          "type": "function" as const
+        }
+      ]
+      
+      const tokenContract = new web3.eth.Contract(erc20ABI, withdrawal.tokenAddress)
+      const contractTokenBal = await tokenContract.methods.balanceOf(CONTRACT_CONFIG.contracts.cryptoWallet).call()
+      const hasEnough = web3.utils.toBN(contractTokenBal).gte(web3.utils.toBN(amountInWei))
+      
+      if (!hasEnough) {
+        const humanBal = web3.utils.fromWei(contractTokenBal, 'ether')
+        toast.dismiss('execute-withdrawal')
+        toast.error(`Insufficient contract token balance. Available: ${humanBal} ${withdrawal.crypto}`)
+        return
+      }
+
+      // Execute the withdrawal on smart contract
+      const tx = await contract.methods.executeWithdrawalTo(
+        withdrawal.userAddress,
+        withdrawal.tokenAddress,
+        amountInWei
+      ).send({ from: account })
+
+      console.log('Withdrawal transaction successful:', tx)
+
+      // Update withdrawal status in Firestore
       await updateDoc(doc(db, 'pending_withdrawals', withdrawal.id), {
         status: 'executed',
         executedAt: new Date(),
-        txHash: '0x' + Math.random().toString(16).substr(2, 64),
+        txHash: tx.transactionHash,
         executedBy: account
       })
 
-      // Log transaction
+      // Log transaction in user's history
       await addDoc(collection(db, 'transactions'), {
         userId: withdrawal.userId,
         type: 'withdrawal',
@@ -201,20 +246,36 @@ const AdminWithdrawals: React.FC = () => {
         inrAmount: withdrawal.inrAmount,
         status: 'completed',
         timestamp: new Date(),
-        txHash: '0x' + Math.random().toString(16).substr(2, 64),
+        txHash: tx.transactionHash,
         toAddress: withdrawal.userAddress,
-        description: `INR to ${withdrawal.crypto} withdrawal`
+        description: `INR to ${withdrawal.crypto} withdrawal`,
+        blockNumber: tx.blockNumber
       })
 
+      // IMPORTANT: Do NOT deduct INR balance here
+      // INR will only be deducted when BXC is actually received by user's wallet
+      console.log('🔄 Withdrawal executed - INR will be deducted only when BXC is received by user wallet')
+
       toast.dismiss('execute-withdrawal')
-      toast.success('Withdrawal executed successfully!')
+      toast.success(`Withdrawal executed! Transaction: ${tx.transactionHash.slice(0, 10)}...`)
+      
+      // Reload withdrawals
       await loadPendingWithdrawals()
 
     } catch (error: any) {
       const msg = getRevertMessage(error)
       console.error('Withdrawal execution error:', { error, message: msg })
       toast.dismiss('execute-withdrawal')
-      toast.error(`Failed to execute withdrawal: ${msg}`)
+      
+      if (msg.includes('caller is not the owner')) {
+        toast.error('Only contract owner can execute withdrawals')
+      } else if (msg.includes('paused')) {
+        toast.error('Contract is paused. Unpause before executing.')
+      } else if (msg.includes('insufficient')) {
+        toast.error('Insufficient contract token balance')
+      } else {
+        toast.error(`Failed to execute withdrawal: ${msg}`)
+      }
     }
   }
 
@@ -232,22 +293,14 @@ const AdminWithdrawals: React.FC = () => {
         rejectedBy: account || 'admin'
       })
 
-      // Refund INR to user
-      const userDoc = await getDocs(query(collection(db, 'users'), where('uid', '==', withdrawal.userId)))
-      if (!userDoc.empty) {
-        const userData = userDoc.docs[0].data()
-        const newInrBalance = (userData.inrBalance || 0) + withdrawal.inrAmount
-        
-        await updateDoc(doc(db, 'users', userDoc.docs[0].id), {
-          inrBalance: newInrBalance,
-          updatedAt: new Date()
-        })
-      }
+      // IMPORTANT: Do NOT refund INR when rejecting BXC withdrawals
+      // INR should only be deducted when BXC is actually received
+      console.log('🔄 BXC withdrawal rejected - INR will NOT be deducted')
 
       toast.dismiss('reject-withdrawal')
-      toast.success('Withdrawal rejected and INR refunded')
+      toast.success('Withdrawal rejected successfully')
       await loadPendingWithdrawals()
-
+      
     } catch (error: any) {
       console.error('Withdrawal rejection error:', error)
       toast.dismiss('reject-withdrawal')
@@ -257,9 +310,9 @@ const AdminWithdrawals: React.FC = () => {
 
   // Show admin login form if not authenticated
   if (!isAdminAuthenticated) {
-    return (
-      <div style={{ padding: '2rem 0' }}>
-        <div className="container">
+  return (
+    <div style={{ padding: '2rem 0' }}>
+      <div className="container">
           <div style={{ maxWidth: '400px', margin: '0 auto' }}>
             <div className="card">
               <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
@@ -269,8 +322,8 @@ const AdminWithdrawals: React.FC = () => {
                 <p style={{ color: '#666', fontSize: '1rem' }}>
                   Access the withdrawal management panel
                 </p>
-              </div>
-              
+        </div>
+
               <form onSubmit={handleAdminLogin}>
                 <div style={{ marginBottom: '1rem' }}>
                   <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
@@ -290,13 +343,13 @@ const AdminWithdrawals: React.FC = () => {
                       fontSize: '1rem'
                     }}
                   />
-                </div>
-                
+          </div>
+
                 <div style={{ marginBottom: '1.5rem' }}>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
                     Password
-                  </label>
-                  <input
+                </label>
+                <input
                     type="password"
                     value={adminLoginForm.password}
                     onChange={(e) => setAdminLoginForm(prev => ({ ...prev, password: e.target.value }))}
@@ -309,19 +362,19 @@ const AdminWithdrawals: React.FC = () => {
                       borderRadius: '8px',
                       fontSize: '1rem'
                     }}
-                  />
-                </div>
+                />
+              </div>
                 
-                <button
+              <button
                   type="submit"
                   disabled={adminLoading}
-                  style={{
+                style={{
                     width: '100%',
                     padding: '0.75rem',
                     background: '#007bff',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '8px',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
                     fontSize: '1rem',
                     fontWeight: '600',
                     cursor: adminLoading ? 'not-allowed' : 'pointer',
@@ -329,7 +382,7 @@ const AdminWithdrawals: React.FC = () => {
                   }}
                 >
                   {adminLoading ? 'Logging in...' : 'Login as Admin'}
-                </button>
+              </button>
               </form>
               
               <div style={{ marginTop: '1.5rem', padding: '1rem', background: '#f8f9fa', borderRadius: '8px' }}>
@@ -342,9 +395,9 @@ const AdminWithdrawals: React.FC = () => {
                 </p>
               </div>
             </div>
+            </div>
           </div>
         </div>
-      </div>
     )
   }
 
@@ -387,10 +440,10 @@ const AdminWithdrawals: React.FC = () => {
               {supportsPausedCheck ? (isPaused ? 'PAUSED' : 'ACTIVE') : 'UNKNOWN'}
             </span>
           </div>
-          <button
+            <button
             onClick={handleAdminLogout}
-            style={{
-              padding: '0.5rem 1rem',
+              style={{
+                padding: '0.5rem 1rem',
               background: '#dc3545',
               color: 'white',
               border: 'none',
@@ -446,7 +499,7 @@ const AdminWithdrawals: React.FC = () => {
             ⚠️ Connected wallet is NOT the contract owner. Execution will fail.
           </div>
         )}
-      </div>
+          </div>
 
       {/* Pending Withdrawals - Exact match to HTML */}
       <div style={{
@@ -458,19 +511,19 @@ const AdminWithdrawals: React.FC = () => {
         <h2 style={{ margin: '0 0 2rem 0', fontSize: '1.5rem', fontWeight: 'bold' }}>
           <i className="fas fa-list"></i> Pending Withdrawals
         </h2>
-        
-        {loading ? (
+
+          {loading ? (
           <div style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
             <i className="fas fa-spinner fa-spin" style={{ fontSize: '2rem', marginBottom: '1rem' }}></i>
-            <p>Loading pending withdrawals...</p>
-          </div>
-        ) : pendingWithdrawals.length === 0 ? (
+              <p>Loading pending withdrawals...</p>
+            </div>
+          ) : pendingWithdrawals.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '3rem', color: '#6b7280' }}>
             <i className="fas fa-check-circle" style={{ fontSize: '3rem', color: '#10b981', marginBottom: '1rem' }}></i>
             <h3>No pending withdrawals</h3>
             <p>All withdrawal requests have been processed.</p>
-          </div>
-        ) : (
+            </div>
+          ) : (
           <div>
             {pendingWithdrawals.map((withdrawal) => {
               const createdAt = withdrawal.createdAt?.toDate?.() || new Date()
@@ -494,7 +547,7 @@ const AdminWithdrawals: React.FC = () => {
                     marginBottom: '1rem'
                   }}>
                     <h3 style={{ margin: 0, fontSize: '1.2rem' }}>INR → {withdrawal.crypto} Withdrawal</h3>
-                    <span style={{
+                          <span style={{
                       padding: '0.25rem 0.75rem',
                       borderRadius: '20px',
                       fontSize: '0.875rem',
@@ -503,8 +556,8 @@ const AdminWithdrawals: React.FC = () => {
                       color: withdrawal.status === 'pending_admin_execution' ? '#92400e' : '#991b1b'
                     }}>
                       {withdrawal.status.replace(/_/g, ' ').toUpperCase()}
-                    </span>
-                  </div>
+                          </span>
+                        </div>
 
                   {/* Withdrawal Info Grid */}
                   <div style={{
@@ -536,18 +589,18 @@ const AdminWithdrawals: React.FC = () => {
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
                       <span style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.25rem' }}>Created At</span>
                       <span style={{ fontWeight: '600', color: '#1f2937' }}>{formattedDate}</span>
+                      </div>
                     </div>
-                  </div>
-
+                    
                   {/* Action Buttons */}
                   <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-                    <button
+                        <button
                       onClick={() => executeWithdrawal(withdrawal)}
                       disabled={shouldDisable}
-                      style={{
+                          style={{
                         background: '#10b981',
-                        color: 'white',
-                        border: 'none',
+                            color: 'white',
+                            border: 'none',
                         padding: '0.75rem 1.5rem',
                         borderRadius: '6px',
                         cursor: shouldDisable ? 'not-allowed' : 'pointer',
@@ -557,13 +610,13 @@ const AdminWithdrawals: React.FC = () => {
                       title={!isOwner ? 'Connect the contract owner wallet' : 'Contract is paused'}
                     >
                       <i className="fas fa-check"></i> Execute Withdrawal
-                    </button>
-                    <button
-                      onClick={() => rejectWithdrawal(withdrawal)}
-                      style={{
+                        </button>
+                        <button
+                          onClick={() => rejectWithdrawal(withdrawal)}
+                          style={{
                         background: '#ef4444',
-                        color: 'white',
-                        border: 'none',
+                            color: 'white',
+                            border: 'none',
                         padding: '0.75rem 1.5rem',
                         borderRadius: '6px',
                         cursor: 'pointer',
@@ -571,16 +624,17 @@ const AdminWithdrawals: React.FC = () => {
                       }}
                     >
                       <i className="fas fa-times"></i> Reject
-                    </button>
-                  </div>
-                </div>
+                        </button>
+                        </div>
+                      </div>
               )
             })}
-          </div>
-        )}
+            </div>
+          )}
       </div>
     </div>
   )
 }
 
 export default AdminWithdrawals
+

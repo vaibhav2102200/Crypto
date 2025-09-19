@@ -20,7 +20,7 @@ const Deposit: React.FC = () => {
   })
 
   const { currentUser, userProfile } = useAuth()
-  const { refreshAllBalances } = useWeb3()
+  const { refreshAllBalances, checkDirectDepositsToContract, startTransactionMonitoring, detectTransactionByHash } = useWeb3()
 
   const navigate = useNavigate()
 
@@ -58,6 +58,7 @@ const Deposit: React.FC = () => {
     try {
       toast.loading('Refreshing balances...', { id: 'refresh-balances' })
       await refreshAllBalances()
+      await checkDirectDepositsToContract()
       await loadRecentDeposits()
       await loadRecentCryptoDeposits()
       toast.dismiss('refresh-balances')
@@ -111,6 +112,65 @@ const Deposit: React.FC = () => {
       window.removeEventListener('balanceUpdated', handleBalanceUpdate)
     }
   }, [currentUser, navigate, loadRecentDeposits, loadRecentCryptoDeposits])
+
+  // Manual check for direct deposits
+  const checkForDirectDeposits = async () => {
+    try {
+      toast.loading('Checking for direct deposits...', { id: 'check-deposits' })
+      await checkDirectDepositsToContract()
+      await loadRecentDeposits()
+      await loadRecentCryptoDeposits()
+      toast.dismiss('check-deposits')
+      toast.success('Direct deposit check completed!')
+    } catch (error) {
+      console.error('Error checking direct deposits:', error)
+      toast.dismiss('check-deposits')
+      toast.error('Failed to check for direct deposits')
+    }
+  }
+
+  // Force check for specific transaction (for debugging)
+  const forceCheckTransaction = async () => {
+    try {
+      console.log('🔍 Force checking for BXC transaction...')
+      toast.loading('Force checking transaction...', { id: 'force-check' })
+      
+      // This will trigger the check with more detailed logging
+      await checkDirectDepositsToContract()
+      
+      // Also refresh balances
+      await refreshAllBalances()
+      
+      toast.dismiss('force-check')
+      toast.success('Force check completed! Check console for details.')
+    } catch (error) {
+      console.error('Error in force check:', error)
+      toast.dismiss('force-check')
+      toast.error('Force check failed')
+    }
+  }
+
+  // Manual transaction hash detection
+  const [txHash, setTxHash] = useState('')
+  const detectSpecificTransaction = async () => {
+    if (!txHash.trim()) {
+      toast.error('Please enter a transaction hash')
+      return
+    }
+
+    try {
+      toast.loading('Detecting specific transaction...', { id: 'detect-tx' })
+      await detectTransactionByHash(txHash.trim())
+      await loadRecentDeposits()
+      await loadRecentCryptoDeposits()
+      toast.dismiss('detect-tx')
+      toast.success('Transaction detection completed! Check console for details.')
+    } catch (error) {
+      console.error('Error detecting transaction:', error)
+      toast.dismiss('detect-tx')
+      toast.error('Transaction detection failed')
+    }
+  }
 
   const handleInrDeposit = async () => {
     const amount = parseFloat(inrAmount)
@@ -634,6 +694,156 @@ const Deposit: React.FC = () => {
                 </div>
                 <small style={{ color: '#666' }}>Send BXC to this address. Minimum: 10 BXC</small>
               </div>
+            </div>
+          </div>
+
+          {/* Direct Deposit Detection */}
+          <div className="animate-fadeInUp" style={{ marginTop: '2rem' }}>
+            <div className="card hover-lift" style={{
+              background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.05) 0%, rgba(16, 185, 129, 0.05) 100%)',
+              border: '1px solid rgba(34, 197, 94, 0.2)',
+              textAlign: 'center'
+            }}>
+              <h3 style={{ 
+                fontSize: '1.4rem', 
+                fontWeight: '700', 
+                marginBottom: '1rem',
+                color: 'rgba(255, 255, 255, 0.9)'
+              }}>
+                🔍 Direct Deposit Detection
+              </h3>
+              <p style={{ color: '#666', marginBottom: '1.5rem' }}>
+                If you sent BXC or USDT directly to the contract address, click below to detect and update your balance.
+              </p>
+              <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+                <button
+                  onClick={checkForDirectDeposits}
+                  disabled={loading}
+                  className="hover-lift"
+                  style={{
+                    padding: '0.75rem 1.5rem',
+                    background: 'linear-gradient(135deg, #22c55e 0%, #10b981 100%)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '12px',
+                    cursor: loading ? 'not-allowed' : 'pointer',
+                    opacity: loading ? 0.6 : 1,
+                    fontSize: '1rem',
+                    fontWeight: '600',
+                    boxShadow: '0 8px 32px rgba(34, 197, 94, 0.3)',
+                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+                  }}
+                >
+                  🔍 Check for Direct Deposits
+                </button>
+                <button
+                  onClick={forceCheckTransaction}
+                  disabled={loading}
+                  className="hover-lift"
+                  style={{
+                    padding: '0.75rem 1.5rem',
+                    background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '12px',
+                    cursor: loading ? 'not-allowed' : 'pointer',
+                    opacity: loading ? 0.6 : 1,
+                    fontSize: '1rem',
+                    fontWeight: '600',
+                    boxShadow: '0 8px 32px rgba(245, 158, 11, 0.3)',
+                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+                  }}
+                >
+                  🔧 Force Check (Debug)
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Manual Transaction Hash Detection */}
+          <div style={{
+            background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
+            border: '2px solid #f59e0b',
+            borderRadius: '1rem',
+            padding: '1.5rem',
+            marginBottom: '2rem',
+            boxShadow: '0 8px 32px rgba(245, 158, 11, 0.2)'
+          }}>
+            <h3 style={{
+              fontSize: '1.25rem',
+              fontWeight: '700',
+              color: '#92400e',
+              marginBottom: '1rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem'
+            }}>
+              🔍 Manual Transaction Detection
+            </h3>
+            <p style={{
+              color: '#92400e',
+              marginBottom: '1rem',
+              fontSize: '0.95rem',
+              lineHeight: '1.5'
+            }}>
+              If your transaction isn't detected automatically, enter the transaction hash below:
+            </p>
+            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+              <input
+                type="text"
+                value={txHash}
+                onChange={(e) => setTxHash(e.target.value)}
+                placeholder="Enter transaction hash (0x...)"
+                style={{
+                  flex: 1,
+                  padding: '0.75rem 1rem',
+                  border: '2px solid #f59e0b',
+                  borderRadius: '0.75rem',
+                  fontSize: '0.95rem',
+                  outline: 'none',
+                  backgroundColor: '#fff',
+                  color: '#374151',
+                  transition: 'all 0.3s ease'
+                }}
+                onFocus={(e) => {
+                  e.target.style.borderColor = '#d97706'
+                  e.target.style.boxShadow = '0 0 0 3px rgba(245, 158, 11, 0.1)'
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = '#f59e0b'
+                  e.target.style.boxShadow = 'none'
+                }}
+              />
+              <button
+                onClick={detectSpecificTransaction}
+                disabled={!txHash.trim()}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  backgroundColor: txHash.trim() ? '#f59e0b' : '#d1d5db',
+                  color: txHash.trim() ? '#fff' : '#9ca3af',
+                  borderRadius: '0.75rem',
+                  fontSize: '0.95rem',
+                  fontWeight: '600',
+                  border: 'none',
+                  cursor: txHash.trim() ? 'pointer' : 'not-allowed',
+                  transition: 'all 0.3s ease',
+                  boxShadow: txHash.trim() ? '0 4px 16px rgba(245, 158, 11, 0.3)' : 'none'
+                }}
+                onMouseEnter={(e) => {
+                  if (txHash.trim()) {
+                    e.currentTarget.style.backgroundColor = '#d97706'
+                    e.currentTarget.style.transform = 'translateY(-2px)'
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (txHash.trim()) {
+                    e.currentTarget.style.backgroundColor = '#f59e0b'
+                    e.currentTarget.style.transform = 'translateY(0)'
+                  }
+                }}
+              >
+                Detect Transaction
+              </button>
             </div>
           </div>
         </div>

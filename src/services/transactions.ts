@@ -93,6 +93,16 @@ export class TransactionService {
     return allTransfers.slice(0, limitCount)
   }
 
+  static async getTransactionByHash(userId: string, txHash: string): Promise<Transaction | null> {
+    try {
+      const transactions = await this.getUserTransactions(userId)
+      return transactions.find(tx => tx.txHash === txHash) || null
+    } catch (error) {
+      console.error('Error fetching transaction by hash:', error)
+      return null
+    }
+  }
+
   static formatAmount(amount: number, currency: string): string {
     if (currency === 'INR') {
       return `₹${amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`

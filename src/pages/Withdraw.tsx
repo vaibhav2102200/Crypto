@@ -256,8 +256,9 @@ const Withdraw: React.FC = () => {
         }
       }
 
-      const newInrBalance = userProfile.inrBalance - inrAmount
-      await updateUserProfile({ inrBalance: newInrBalance })
+      // IMPORTANT: Do NOT deduct INR balance here
+      // INR will only be deducted when BXC is actually received by user's wallet
+      console.log('🔄 Crypto withdrawal requested - INR will be deducted only when crypto is received by user wallet')
 
       await addDoc(collection(db, 'pending_withdrawals'), {
         userId: currentUser!.uid,

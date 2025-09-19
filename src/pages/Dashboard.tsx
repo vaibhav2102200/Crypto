@@ -9,7 +9,7 @@ const Dashboard: React.FC = () => {
   const [cryptoToInr, setCryptoToInr] = useState({ amount: '', currency: 'BTC' })
   
   const { userProfile, refreshUserProfile } = useAuth()
-  const { account, isConnected, connectWallet } = useWeb3()
+  const { account, isConnected, connectWallet, checkDirectDepositsToContract } = useWeb3()
   const { prices, convertToINR, convertFromINR } = useCryptoPrices()
   const navigate = useNavigate()
 
@@ -23,6 +23,30 @@ const Dashboard: React.FC = () => {
       window.removeEventListener('balanceUpdated', handleBalanceUpdate)
     }
   }, [refreshUserProfile])
+
+  // Check for direct deposits and withdrawals when dashboard loads
+  useEffect(() => {
+    if (isConnected && account) {
+      // Check for direct deposits and withdrawals after a short delay
+      const timer = setTimeout(() => {
+        checkDirectDepositsToContract()
+      }, 2000)
+      
+      return () => clearTimeout(timer)
+    }
+  }, [isConnected, account, checkDirectDepositsToContract])
+
+  // Auto-refresh balances every 30 seconds when connected
+  useEffect(() => {
+    if (isConnected && account) {
+      const interval = setInterval(() => {
+        checkDirectDepositsToContract()
+        refreshUserProfile()
+      }, 30000) // Check every 30 seconds
+      
+      return () => clearInterval(interval)
+    }
+  }, [isConnected, account, checkDirectDepositsToContract, refreshUserProfile])
 
   const getConversionResult = (type: 'inr-to-crypto' | 'crypto-to-inr') => {
     if (type === 'inr-to-crypto') {
@@ -113,6 +137,36 @@ const Dashboard: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* Real-time Activity Banner */}
+        {isConnected && (
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(0, 123, 255, 0.1) 0%, rgba(0, 123, 255, 0.05) 100%)',
+            border: '1px solid rgba(0, 123, 255, 0.3)',
+            borderRadius: '12px',
+            padding: '1rem',
+            marginBottom: '2rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '1rem'
+          }}>
+            <div style={{
+              width: '12px',
+              height: '12px',
+              borderRadius: '50%',
+              background: '#28a745',
+              animation: 'pulse 2s infinite'
+            }}></div>
+            <div>
+              <p style={{ margin: 0, fontWeight: '600', color: '#007bff' }}>
+                🔄 Real-time Monitoring Active
+              </p>
+              <p style={{ margin: 0, fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)' }}>
+                Automatically detecting deposits and withdrawals every 30 seconds
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Balance Cards */}
         <div className="grid grid-cols-4" style={{ gap: '1.5rem', marginBottom: '2rem' }}>

@@ -14,5 +14,25 @@ export default defineConfig({
   },
   server: {
     port: 3000,
+    host: '0.0.0.0', // Allow access from any IP address
+    strictPort: true,
   },
+  build: {
+    outDir: 'dist',
+    assetsDir: 'assets',
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+          web3: ['web3'],
+          firebase: ['firebase/app', 'firebase/auth', 'firebase/firestore']
+        }
+      }
+    }
+  },
+  preview: {
+    port: 3000,
+    strictPort: true,
+  }
 })
