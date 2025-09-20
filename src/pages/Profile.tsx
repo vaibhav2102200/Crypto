@@ -24,7 +24,7 @@ const Profile: React.FC = () => {
     accountAge: 0
   })
 
-  const { currentUser, userProfile, logout, refreshUserProfile, updateUserProfile } = useAuth()
+  const { currentUser, userProfile, logout, updateUserProfile } = useAuth()
   const { account, isConnected, connectWallet, disconnectWallet, getNetworkStatus } = useWeb3()
   const { convertToINR } = useCryptoPrices()
   const navigate = useNavigate()

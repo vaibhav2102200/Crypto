@@ -12,12 +12,8 @@ export const CASHFREE_CONFIG = {
   
   // Sandbox Environment
   sandbox: {
-    appId: (typeof process !== 'undefined' && process.env && process.env.VITE_CASHFREE_APP_ID) 
-      ? process.env.VITE_CASHFREE_APP_ID 
-      : 'TEST10783812f10718d0b666328656b221838701',
-    secretKey: (typeof process !== 'undefined' && process.env && process.env.VITE_CASHFREE_SECRET_KEY) 
-      ? process.env.VITE_CASHFREE_SECRET_KEY 
-      : 'cfsk_ma_test_055a585aa73adc293efd874e702cd10c_23aa53e9',
+    appId: import.meta.env.VITE_CASHFREE_APP_ID || 'TEST10783812f10718d0b666328656b221838701',
+    secretKey: import.meta.env.VITE_CASHFREE_SECRET_KEY || 'cfsk_ma_test_055a585aa73adc293efd874e702cd10c_23aa53e9',
     baseUrl: 'https://sandbox.cashfree.com/pg',
     apiVersion: '2023-08-01',
     sdkUrl: 'https://sdk.cashfree.com/js/v3/cashfree.js',
@@ -26,12 +22,8 @@ export const CASHFREE_CONFIG = {
   
   // Production Environment (when ready to go live)
   production: {
-    appId: (typeof process !== 'undefined' && process.env && process.env.VITE_CASHFREE_PROD_APP_ID)
-      ? process.env.VITE_CASHFREE_PROD_APP_ID
-      : 'PROD_APP_ID',
-    secretKey: (typeof process !== 'undefined' && process.env && process.env.VITE_CASHFREE_PROD_SECRET_KEY)
-      ? process.env.VITE_CASHFREE_PROD_SECRET_KEY
-      : 'PROD_SECRET_KEY',
+    appId: import.meta.env.VITE_CASHFREE_PROD_APP_ID || 'PROD_APP_ID',
+    secretKey: import.meta.env.VITE_CASHFREE_PROD_SECRET_KEY || 'PROD_SECRET_KEY',
     baseUrl: 'https://api.cashfree.com/pg',
     apiVersion: '2023-08-01',
     sdkUrl: 'https://sdk.cashfree.com/js/v3/cashfree.js',

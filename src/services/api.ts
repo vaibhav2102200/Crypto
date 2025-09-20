@@ -1,13 +1,5 @@
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const API_BASE_URL =
-  (typeof import.meta !== 'undefined' &&
-    (import.meta as any).env &&
-    (import.meta as any).env.VITE_API_BASE_URL) ||
-  (typeof import.meta !== 'undefined' &&
-    (import.meta as any).env &&
-    (import.meta as any).env.PROD
-    ? 'https://mongodb-2-mr18.onrender.com/api'
-    : 'http://localhost:5000/api');
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 
+  (import.meta.env.PROD ? 'https://mongodb-2-mr18.onrender.com/api' : 'http://localhost:5000/api');
 
 export interface User {
   _id?: string;

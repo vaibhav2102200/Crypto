@@ -40,7 +40,6 @@ interface Web3ContextType {
   stopTransactionMonitoring: () => void
   detectTransactionByHash: (txHash: string) => Promise<void>
   // Admin functions
-  executeWithdrawalTo: (userAddress: string, tokenAddress: string, amount: string) => Promise<string>
 }
 
 const Web3Context = createContext<Web3ContextType | undefined>(undefined)
@@ -829,7 +828,7 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     if (typeof window !== 'undefined') {
       (window as any).detectTransactionByHash = detectTransactionByHash
-      (window as any).checkDirectDepositsToContract = checkDirectDepositsToContract
+      ;(window as any).checkDirectDepositsToContract = checkDirectDepositsToContract
       console.log('🔧 Debug functions available:')
       console.log('- window.detectTransactionByHash(txHash)')
       console.log('- window.checkDirectDepositsToContract()')
@@ -862,7 +861,7 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
       
       return () => clearTimeout(immediateTimer)
     }
-  }, [isConnected, account, checkDirectDepositsToContract])
+  }, [isConnected, account])
 
   const value: Web3ContextType = {
     web3,

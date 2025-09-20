@@ -447,14 +447,7 @@ export class CashfreeManager {
         console.error('Payment error:', result.error)
         toast.dismiss('payment-toast')
         toast.error('Payment failed. Please try again.', {
-          duration: 5000,
-          action: {
-            label: 'Try Again',
-            onClick: () => {
-              // Retry payment with same details
-              this.initiatePayment(amount, customerEmail, customerName, customerId, customerPhone)
-            }
-          }
+          duration: 5000
         })
         await this.handlePaymentFailure(orderDetails.order_id, 'failed', result.error.message)
       } else if (result && result.success) {
@@ -519,14 +512,7 @@ export class CashfreeManager {
             console.log('Payment not confirmed by delayed status check')
             toast.dismiss('payment-toast')
             toast.error('Payment failed. Please try again.', {
-              duration: 5000,
-              action: {
-                label: 'Try Again',
-                onClick: () => {
-                  // Retry payment with same details
-                  this.initiatePayment(amount, customerEmail, customerName, customerId, customerPhone)
-                }
-              }
+              duration: 5000
             })
             await this.handlePaymentFailure(orderDetails.order_id, 'failed', 'Payment failed - please try again')
           }
@@ -534,14 +520,7 @@ export class CashfreeManager {
           console.error('Error in delayed status check:', statusError)
         toast.dismiss('payment-toast')
           toast.error('Payment status unclear. Please try again.', {
-            duration: 5000,
-            action: {
-              label: 'Try Again',
-              onClick: () => {
-                // Retry payment with same details
-                this.initiatePayment(amount, customerEmail, customerName, customerId, customerPhone)
-              }
-            }
+            duration: 5000
           })
         }
       }
@@ -550,14 +529,7 @@ export class CashfreeManager {
       console.error('Error during payment initiation:', error)
       toast.dismiss('payment-toast')
       toast.error('Payment failed. Please try again.', {
-        duration: 5000,
-        action: {
-          label: 'Try Again',
-          onClick: () => {
-            // Retry payment with same details
-            this.initiatePayment(amount, customerEmail, customerName, customerId, customerPhone)
-          }
-        }
+        duration: 5000
       })
       await this.handlePaymentFailure(this.currentOrder?.order_id || 'N/A', 'failed', error.message)
     } finally {

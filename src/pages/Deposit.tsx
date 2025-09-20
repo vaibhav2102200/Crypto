@@ -20,7 +20,7 @@ const Deposit: React.FC = () => {
   })
 
   const { currentUser, userProfile } = useAuth()
-  const { refreshAllBalances, checkDirectDepositsToContract, startTransactionMonitoring, detectTransactionByHash } = useWeb3()
+  const { refreshAllBalances, checkDirectDepositsToContract, detectTransactionByHash } = useWeb3()
 
   const navigate = useNavigate()
 
@@ -237,14 +237,7 @@ const Deposit: React.FC = () => {
     } catch (error: any) {
       console.error('Deposit error:', error)
       toast.error('Deposit failed. Please try again.', {
-        duration: 5000,
-        action: {
-          label: 'Try Again',
-          onClick: () => {
-            // Retry deposit
-            handleInrDeposit()
-          }
-        }
+        duration: 5000
       })
     } finally {
       setLoading(false)
