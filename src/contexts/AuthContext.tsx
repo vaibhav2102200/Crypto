@@ -15,6 +15,7 @@ export interface UserProfile {
   userId: string
   email: string
   displayName?: string
+  name?: string
   phone?: string
   address?: string
   walletAddress: string
@@ -103,6 +104,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           userId: user.uid,
           email: mongoUser.email,
           displayName: mongoUser.displayName,
+          name: mongoUser.name,
+          phone: mongoUser.phone,
           walletAddress: generateWalletAddress(),
           inrBalance: mongoUser.inrBalance,
           cryptoBalances: mongoUser.cryptoBalances,
@@ -177,6 +180,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (updates.displayName) {
         mongoUpdates.displayName = updates.displayName
       }
+      if (updates.name) {
+        mongoUpdates.name = updates.name
+      }
+      if (updates.phone) {
+        mongoUpdates.phone = updates.phone
+      }
 
       await mongoDBService.updateUser(currentUser.uid, mongoUpdates)
       
@@ -186,6 +195,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       
       setUserProfile(prev => prev ? { ...prev, ...updatedProfile } : null)
+      
+      console.log('Profile updated successfully:', updatedProfile)
+      toast.success('Profile updated successfully!')
     } catch (error) {
       console.error('Error updating profile:', error)
       toast.error('Error updating profile')

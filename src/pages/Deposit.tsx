@@ -204,12 +204,25 @@ const Deposit: React.FC = () => {
       if (cashfreeManager.isInitialized) {
         console.log('Calling Cashfree initiatePayment...')
         
-        // Call the payment initiation
+        // Get user profile details for payment
+        const customerEmail = currentUser.email || userProfile.email || ''
+        const customerName = userProfile.name || currentUser.displayName || userProfile.email.split('@')[0] || 'User'
+        const customerPhone = userProfile.phone || '9999999999' // Default phone if not provided
+        
+        console.log('Using profile details for payment:', {
+          email: customerEmail,
+          name: customerName,
+          phone: customerPhone,
+          amount: amount
+        })
+        
+        // Call the payment initiation with profile details
         await cashfreeManager.initiatePayment(
           amount,
-          currentUser.email || '',
-          currentUser.displayName || userProfile.email.split('@')[0] || 'User',
-          currentUser.uid
+          customerEmail,
+          customerName,
+          currentUser.uid,
+          customerPhone
         )
         
         // Clear the input after successful initiation
@@ -223,7 +236,16 @@ const Deposit: React.FC = () => {
       }
     } catch (error: any) {
       console.error('Deposit error:', error)
-      toast.error('Error processing deposit: ' + error.message)
+      toast.error('Deposit failed. Please try again.', {
+        duration: 5000,
+        action: {
+          label: 'Try Again',
+          onClick: () => {
+            // Retry deposit
+            handleInrDeposit()
+          }
+        }
+      })
     } finally {
       setLoading(false)
     }

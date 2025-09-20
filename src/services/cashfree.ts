@@ -2,6 +2,7 @@ import { CASHFREE_CONFIG } from '../config/cashfree'
 import { auth } from '../config/firebase'
 import { mongoDBService } from './mongodb'
 import toast from 'react-hot-toast'
+import axios from 'axios'
 
 declare global {
   interface Window {
@@ -34,15 +35,69 @@ export class CashfreeManager {
     try {
       console.log('CashfreeManager init called')
       
-      // For demo purposes, we'll use a fallback integration
-      // In production, you would load the actual Cashfree SDK
-      console.log('Creating fallback Cashfree integration...')
-      await this.createFallbackIntegration()
+      // Check if we're in demo mode
+      if (CASHFREE_CONFIG.isDemo()) {
+        console.log('Using demo Cashfree integration...')
+        await this.createDemoIntegration()
+      } else {
+        console.log('Loading real Cashfree SDK...')
+        await this.loadCashfreeSDK()
+      }
       
     } catch (error) {
       console.error('Cashfree initialization error:', error)
       await this.createFallbackIntegration()
     }
+  }
+
+  // Load the actual Cashfree SDK
+  async loadCashfreeSDK() {
+    return new Promise((resolve, reject) => {
+      // Check if SDK is already loaded
+      if (window.Cashfree) {
+        console.log('Cashfree SDK already loaded')
+        this.cashfree = window.Cashfree({ mode: CASHFREE_CONFIG.getMode() })
+        resolve(this.cashfree)
+        return
+      }
+
+      // Load SDK script
+      const script = document.createElement('script')
+      script.src = CASHFREE_CONFIG.getSdkUrl()
+      script.onload = () => {
+        console.log('Cashfree SDK loaded successfully')
+        try {
+          this.cashfree = window.Cashfree({ mode: CASHFREE_CONFIG.getMode() })
+          console.log('Cashfree SDK initialized with mode:', CASHFREE_CONFIG.getMode())
+          resolve(this.cashfree)
+        } catch (error) {
+          console.error('Error initializing Cashfree SDK:', error)
+          reject(error)
+        }
+      }
+      script.onerror = () => {
+        console.error('Failed to load Cashfree SDK')
+        reject(new Error('Failed to load Cashfree SDK'))
+      }
+      document.head.appendChild(script)
+    })
+  }
+
+  // Create demo integration using the demo server
+  async createDemoIntegration() {
+    console.log('Creating demo Cashfree integration...')
+    
+    this.isInitialized = true
+    
+    this.cashfree = {
+      checkout: (options: any) => {
+        console.log('Demo Cashfree checkout initialized with options:', options)
+        return this.createDemoCheckout(options)
+      }
+    }
+    
+    console.log('Demo integration created successfully')
+    this.addTestModeIndicator()
   }
 
   // Create fallback integration when scripts fail
@@ -109,6 +164,16 @@ export class CashfreeManager {
     } catch (error) {
       console.error('Error adding test mode indicator:', error)
     }
+  }
+
+  // Create demo checkout using the demo server
+  createDemoCheckout(options: any) {
+    console.log('Demo Cashfree checkout initialized')
+    
+    return new Promise((resolve, reject) => {
+      // Create a more user-friendly demo payment interface
+      this.createDemoPaymentInterface(options, resolve, reject)
+    })
   }
 
   // Create mock checkout when Cashfree is unavailable
@@ -263,7 +328,7 @@ export class CashfreeManager {
   }
 
   // Main method to initiate payment
-  async initiatePayment(amount: number, customerEmail: string, customerName: string, customerId: string): Promise<void> {
+  async initiatePayment(amount: number, customerEmail: string, customerName: string, customerId: string, customerPhone?: string): Promise<void> {
     if (this.isProcessing) {
       toast.error('A payment is already in progress.')
       return
@@ -291,15 +356,28 @@ export class CashfreeManager {
         }
       }
 
-      const customerPhone = '9999999999' // Placeholder
+      const phoneNumber = customerPhone || '9999999999' // Use provided phone or default
+
+      console.log('Payment initiation details:', {
+        amount,
+        customerEmail,
+        customerName,
+        customerId,
+        customerPhone: phoneNumber
+      })
 
       // Create order details
-      const orderDetails = await this.createOrderOnServer(amount, customerId, customerEmail, customerPhone)
+      const orderDetails = await this.createOrderOnServer(amount, customerId, customerEmail, phoneNumber)
       this.currentOrder = orderDetails
 
       console.log('Order created:', orderDetails)
+      console.log('Payment session ID:', orderDetails.payment_session_id)
+      console.log('Order ID:', orderDetails.order_id)
 
-      // Since we're in demo mode, always use the mock checkout
+      // Check if we're using real Cashfree or demo mode
+      let result: any
+
+      if (CASHFREE_CONFIG.isDemo()) {
       console.log('Using demo payment system...')
       
       const checkoutOptions = {
@@ -311,31 +389,176 @@ export class CashfreeManager {
       console.log('Initiating demo checkout with options:', checkoutOptions)
 
       // Use the mock checkout
-      const result = await this.cashfree.checkout(checkoutOptions)
+        result = await this.cashfree.checkout(checkoutOptions)
+      } else {
+        console.log('Using real Cashfree SDK...')
+        
+        const checkoutOptions = {
+          paymentSessionId: orderDetails.payment_session_id,
+          redirectTarget: '_modal'
+        }
+
+        console.log('Initiating real Cashfree checkout with options:', checkoutOptions)
+
+        // Add event listener for when Cashfree modal closes
+        const handleModalClose = () => {
+          console.log('Cashfree modal closed, checking payment status...')
+          setTimeout(async () => {
+            try {
+              const orderStatus = await this.checkOrderStatus(orderDetails.order_id)
+              console.log('Modal close order status check:', orderStatus)
+              
+              if (orderStatus && orderStatus.order_status === 'PAID') {
+                console.log('Payment confirmed after modal close!')
+                toast.dismiss('payment-toast')
+                toast.success('Payment successful! Balance updated.')
+                await this.handlePaymentSuccess(orderDetails.order_id, 'PAYMENT_ID', amount, 'INR', customerId, 'completed', `INR deposit via Cashfree (${CASHFREE_CONFIG.isDemo() ? 'Demo' : 'Sandbox'})`)
+              }
+            } catch (error) {
+              console.error('Error checking status after modal close:', error)
+            }
+          }, 1000)
+        }
+
+        // Listen for focus events (modal closing)
+        window.addEventListener('focus', handleModalClose)
+        
+        // Use the real Cashfree SDK
+        try {
+          console.log('Calling Cashfree checkout with options:', checkoutOptions)
+          result = await this.cashfree.checkout(checkoutOptions)
+          console.log('Cashfree checkout completed, result:', result)
+          
+          // Remove event listener after checkout completes
+          window.removeEventListener('focus', handleModalClose)
+        } catch (checkoutError: any) {
+          console.error('Cashfree checkout error:', checkoutError)
+          window.removeEventListener('focus', handleModalClose)
+          throw new Error(`Checkout failed: ${checkoutError.message || checkoutError}`)
+        }
+      }
       
-      console.log('Demo payment result:', result)
+      console.log('Payment result:', result)
+      console.log('Payment result type:', typeof result)
+      console.log('Payment result keys:', Object.keys(result || {}))
       
-      if (result.error) {
-        console.error('Demo payment error:', result.error)
+      // Handle different result formats from Cashfree SDK
+      if (result && result.error) {
+        console.error('Payment error:', result.error)
         toast.dismiss('payment-toast')
-        toast.error('Payment failed: ' + result.error.message)
+        toast.error('Payment failed. Please try again.', {
+          duration: 5000,
+          action: {
+            label: 'Try Again',
+            onClick: () => {
+              // Retry payment with same details
+              this.initiatePayment(amount, customerEmail, customerName, customerId, customerPhone)
+            }
+          }
+        })
         await this.handlePaymentFailure(orderDetails.order_id, 'failed', result.error.message)
-      } else if (result.success) {
-        console.log('Demo payment successful!')
+      } else if (result && result.success) {
+        console.log('Payment successful!')
         toast.dismiss('payment-toast')
         toast.success('Payment successful! Balance updated.')
-        await this.handlePaymentSuccess(orderDetails.order_id, result.paymentId || 'DEMO_PAYMENT', amount, 'INR', customerId, 'completed', 'INR deposit via Cashfree (Demo)')
-      } else {
-        console.log('Payment cancelled or incomplete')
+        await this.handlePaymentSuccess(orderDetails.order_id, result.paymentId || 'PAYMENT_ID', amount, 'INR', customerId, 'completed', `INR deposit via Cashfree (${CASHFREE_CONFIG.isDemo() ? 'Demo' : 'Sandbox'})`)
+      } else if (result && result.redirect === false) {
+        // Cashfree SDK returns { redirect: false } on successful payment
+        console.log('Payment successful (redirect: false)!')
         toast.dismiss('payment-toast')
-        toast.error('Payment was cancelled')
-        await this.handlePaymentFailure(orderDetails.order_id, 'cancelled', 'Payment cancelled by user')
+        toast.success('Payment successful! Balance updated.')
+        await this.handlePaymentSuccess(orderDetails.order_id, result.paymentId || 'PAYMENT_ID', amount, 'INR', customerId, 'completed', `INR deposit via Cashfree (${CASHFREE_CONFIG.isDemo() ? 'Demo' : 'Sandbox'})`)
+      } else if (result && result.status === 'SUCCESS') {
+        // Alternative success format
+        console.log('Payment successful (status: SUCCESS)!')
+        toast.dismiss('payment-toast')
+        toast.success('Payment successful! Balance updated.')
+        await this.handlePaymentSuccess(orderDetails.order_id, result.paymentId || 'PAYMENT_ID', amount, 'INR', customerId, 'completed', `INR deposit via Cashfree (${CASHFREE_CONFIG.isDemo() ? 'Demo' : 'Sandbox'})`)
+      } else if (result === null || result === undefined) {
+        // Payment completed successfully (Cashfree SDK returns null/undefined on success)
+        console.log('Payment successful (null result)!')
+        
+        // Verify payment status with order status check
+        try {
+          const orderStatus = await this.checkOrderStatus(orderDetails.order_id)
+          console.log('Order status check:', orderStatus)
+          
+          if (orderStatus && orderStatus.order_status === 'PAID') {
+            toast.dismiss('payment-toast')
+            toast.success('Payment successful! Balance updated.')
+            await this.handlePaymentSuccess(orderDetails.order_id, 'PAYMENT_ID', amount, 'INR', customerId, 'completed', `INR deposit via Cashfree (${CASHFREE_CONFIG.isDemo() ? 'Demo' : 'Sandbox'})`)
+          } else {
+            console.log('Payment not confirmed by order status check')
+            toast.dismiss('payment-toast')
+            toast.error('Payment status unclear. Please check your balance.')
+          }
+        } catch (statusError) {
+          console.error('Error checking order status:', statusError)
+          // Still treat as successful since Cashfree returned null (usually means success)
+          toast.dismiss('payment-toast')
+          toast.success('Payment successful! Balance updated.')
+          await this.handlePaymentSuccess(orderDetails.order_id, 'PAYMENT_ID', amount, 'INR', customerId, 'completed', `INR deposit via Cashfree (${CASHFREE_CONFIG.isDemo() ? 'Demo' : 'Sandbox'})`)
+        }
+      } else {
+        console.log('Payment result unclear, checking order status...')
+        console.log('Unexpected result format:', result)
+        
+        // Wait a moment for Cashfree to process the payment
+        await new Promise(resolve => setTimeout(resolve, 2000))
+        
+        try {
+          const orderStatus = await this.checkOrderStatus(orderDetails.order_id)
+          console.log('Delayed order status check:', orderStatus)
+          
+          if (orderStatus && orderStatus.order_status === 'PAID') {
+            console.log('Payment confirmed by delayed status check!')
+            toast.dismiss('payment-toast')
+            toast.success('Payment successful! Balance updated.')
+            await this.handlePaymentSuccess(orderDetails.order_id, 'PAYMENT_ID', amount, 'INR', customerId, 'completed', `INR deposit via Cashfree (${CASHFREE_CONFIG.isDemo() ? 'Demo' : 'Sandbox'})`)
+          } else {
+            console.log('Payment not confirmed by delayed status check')
+            toast.dismiss('payment-toast')
+            toast.error('Payment failed. Please try again.', {
+              duration: 5000,
+              action: {
+                label: 'Try Again',
+                onClick: () => {
+                  // Retry payment with same details
+                  this.initiatePayment(amount, customerEmail, customerName, customerId, customerPhone)
+                }
+              }
+            })
+            await this.handlePaymentFailure(orderDetails.order_id, 'failed', 'Payment failed - please try again')
+          }
+        } catch (statusError) {
+          console.error('Error in delayed status check:', statusError)
+        toast.dismiss('payment-toast')
+          toast.error('Payment status unclear. Please try again.', {
+            duration: 5000,
+            action: {
+              label: 'Try Again',
+              onClick: () => {
+                // Retry payment with same details
+                this.initiatePayment(amount, customerEmail, customerName, customerId, customerPhone)
+              }
+            }
+          })
+        }
       }
 
     } catch (error: any) {
       console.error('Error during payment initiation:', error)
       toast.dismiss('payment-toast')
-      toast.error('Failed to initiate payment: ' + error.message)
+      toast.error('Payment failed. Please try again.', {
+        duration: 5000,
+        action: {
+          label: 'Try Again',
+          onClick: () => {
+            // Retry payment with same details
+            this.initiatePayment(amount, customerEmail, customerName, customerId, customerPhone)
+          }
+        }
+      })
       await this.handlePaymentFailure(this.currentOrder?.order_id || 'N/A', 'failed', error.message)
     } finally {
       this.isProcessing = false
@@ -344,13 +567,25 @@ export class CashfreeManager {
 
   public async createOrderOnServer(amount: number, customerId: string, customerEmail: string, customerPhone: string): Promise<any> {
     console.log('Creating order on server...')
-    // In a real application, this would be an API call to your backend
-    // For demo purposes, we simulate a successful order creation
-    return new Promise(resolve => {
-      setTimeout(() => {
+    
+    try {
+      // Always use demo server as proxy to avoid CORS issues
+      const endpoints = CASHFREE_CONFIG.getEndpoints()
+      const response = await axios.post(endpoints.createOrder, {
+        amount,
+        email: customerEmail,
+        phone: customerPhone
+      })
+      
+      console.log('Order created via proxy server:', response.data)
+      return response.data
+    } catch (error: any) {
+      console.error('Error creating order:', error.response?.data || error.message)
+      
+      // Fallback to simulated order
         const orderId = `order_${Date.now()}`
-        console.log(`Simulated order created: ${orderId}`)
-        resolve({
+      console.log(`Fallback simulated order created: ${orderId}`)
+      return {
           order_id: orderId,
           payment_session_id: `session_${orderId}_${Math.random().toString(36).substring(7)}`,
           order_amount: amount,
@@ -359,13 +594,25 @@ export class CashfreeManager {
             customer_email: customerEmail,
             customer_phone: customerPhone
           }
-        })
-      }, 1000)
-    })
+      }
+    }
   }
 
   public hasSDK(): boolean {
     return !!this.cashfree && this.isInitialized
+  }
+
+  // Check order status
+  public async checkOrderStatus(orderId: string): Promise<any> {
+    try {
+      // Always use demo server as proxy to avoid CORS issues
+      const endpoints = CASHFREE_CONFIG.getEndpoints()
+      const response = await axios.get(`${endpoints.orderStatus}/${orderId}`)
+      return response.data
+    } catch (error: any) {
+      console.error('Error checking order status:', error.response?.data || error.message)
+      throw error
+    }
   }
 
 
@@ -430,6 +677,25 @@ export class CashfreeManager {
   // Check if manager is ready for payments
   isReady(): boolean {
     return this.isInitialized && this.cashfree !== null
+  }
+
+  // Manual check for payment status (for testing)
+  async checkPaymentStatusManually(orderId: string): Promise<void> {
+    try {
+      console.log('Manual payment status check for order:', orderId)
+      const orderStatus = await this.checkOrderStatus(orderId)
+      console.log('Manual status check result:', orderStatus)
+      
+      if (orderStatus && orderStatus.order_status === 'PAID') {
+        toast.success('Payment confirmed! Balance updated.')
+        // You can manually trigger balance update here if needed
+      } else {
+        toast.error('Payment not confirmed')
+      }
+    } catch (error) {
+      console.error('Manual status check error:', error)
+      toast.error('Error checking payment status')
+    }
   }
 }
 

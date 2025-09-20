@@ -1,10 +1,14 @@
-const API_BASE_URL = 'https://mongodb-1y1z.onrender.com/api';
+const API_BASE_URL = process.env.NODE_ENV === 'production' 
+  ? 'https://mongodb-2-mr18.onrender.com/api' 
+  : 'http://localhost:5000/api';
 
 export interface User {
   _id?: string;
   uid: string;
   email: string;
   displayName?: string;
+  name?: string;
+  phone?: string;
   inrBalance: number;
   cryptoBalances: {
     BTC: number;

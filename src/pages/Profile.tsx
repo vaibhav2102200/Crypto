@@ -5,14 +5,13 @@ import { useWeb3 } from '../contexts/Web3Context'
 import { useCryptoPrices } from '../contexts/CryptoPriceContext'
 import { TransactionService } from '../services/transactions'
 import { updateProfile } from 'firebase/auth'
-import { doc, updateDoc } from 'firebase/firestore'
-import { db } from '../config/firebase'
 import toast from 'react-hot-toast'
 
 const Profile: React.FC = () => {
   const [editMode, setEditMode] = useState(false)
   const [profileData, setProfileData] = useState({
     displayName: '',
+    name: '',
     email: '',
     phone: '',
     address: ''
@@ -25,7 +24,7 @@ const Profile: React.FC = () => {
     accountAge: 0
   })
 
-  const { currentUser, userProfile, logout, refreshUserProfile } = useAuth()
+  const { currentUser, userProfile, logout, refreshUserProfile, updateUserProfile } = useAuth()
   const { account, isConnected, connectWallet, disconnectWallet, getNetworkStatus } = useWeb3()
   const { convertToINR } = useCryptoPrices()
   const navigate = useNavigate()
@@ -39,6 +38,7 @@ const Profile: React.FC = () => {
     if (userProfile) {
       setProfileData({
         displayName: currentUser.displayName || '',
+        name: userProfile.name || '',
         email: userProfile.email || currentUser.email || '',
         phone: userProfile.phone || '',
         address: userProfile.address || ''
@@ -89,15 +89,14 @@ const Profile: React.FC = () => {
         })
       }
 
-      // Update Firestore profile
-      const userRef = doc(db, 'users', currentUser.uid)
-      await updateDoc(userRef, {
+      // Update MongoDB profile using AuthContext
+      await updateUserProfile({
+        displayName: profileData.displayName,
+        name: profileData.name,
         phone: profileData.phone,
         address: profileData.address
       })
 
-      await refreshUserProfile()
-      toast.success('Profile updated successfully!')
       setEditMode(false)
     } catch (error: any) {
       console.error('Error updating profile:', error)
@@ -214,6 +213,25 @@ const Profile: React.FC = () => {
                   ) : (
                     <p style={{ margin: 0, padding: '0.75rem', background: 'black', borderRadius: '8px' }}>
                       {profileData.displayName || 'Not set'}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+                    Full Name
+                  </label>
+                  {editMode ? (
+                    <input
+                      type="text"
+                      value={profileData.name}
+                      onChange={(e) => setProfileData(prev => ({ ...prev, name: e.target.value }))}
+                      placeholder="Enter your full name"
+                      style={{ width: '100%' }}
+                    />
+                  ) : (
+                    <p style={{ margin: 0, padding: '0.75rem', background: 'black', borderRadius: '8px' }}>
+                      {profileData.name || 'Not set'}
                     </p>
                   )}
                 </div>

@@ -1,23 +1,37 @@
 // Cashfree Configuration
 export const CASHFREE_CONFIG = {
+  // Demo Server Environment (for development/testing)
+  demo: {
+    appId: 'DEMO_APP_ID',
+    secretKey: 'DEMO_SECRET_KEY',
+    baseUrl: 'http://localhost:5001/api', // Demo server endpoint
+    apiVersion: '2023-08-01',
+    sdkUrl: 'https://sdk.cashfree.com/js/v3/cashfree.js',
+    mode: 'sandbox'
+  },
+  
   // Sandbox Environment
   sandbox: {
-    appId: 'YOUR_SANDBOX_APP_ID', // Your actual Cashfree Sandbox App ID
-    secretKey: 'YOUR_SANDBOX_SECRET_KEY', // Your actual Cashfree Sandbox Secret Key
-    baseUrl: 'https://sandbox.cashfree.com/pg/orders',
-    apiVersion: '2022-09-01'
+    appId: 'TEST10783812f10718d0b666328656b221838701', // Your actual Cashfree Sandbox App ID
+    secretKey: 'cfsk_ma_test_055a585aa73adc293efd874e702cd10c_23aa53e9', // Your actual Cashfree Sandbox Secret Key
+    baseUrl: 'https://sandbox.cashfree.com/pg',
+    apiVersion: '2023-08-01',
+    sdkUrl: 'https://sdk.cashfree.com/js/v3/cashfree.js',
+    mode: 'sandbox'
   },
   
   // Production Environment (when ready to go live)
   production: {
     appId: 'PROD_APP_ID', // Replace with your Cashfree Production App ID
     secretKey: 'PROD_SECRET_KEY', // Replace with your Cashfree Production Secret Key
-    baseUrl: 'https://api.cashfree.com/pg/orders',
-    apiVersion: '2022-09-01'
+    baseUrl: 'https://api.cashfree.com/pg',
+    apiVersion: '2023-08-01',
+    sdkUrl: 'https://sdk.cashfree.com/js/v3/cashfree.js',
+    mode: 'production'
   },
   
   // Current environment (change to 'production' when going live)
-  currentEnvironment: 'sandbox' as 'sandbox' | 'production',
+  currentEnvironment: 'sandbox' as 'demo' | 'sandbox' | 'production',
   
   // Get current config based on environment
   getCurrentConfig() {
@@ -42,6 +56,35 @@ export const CASHFREE_CONFIG = {
   // Get Secret Key for current environment
   getSecretKey() {
     return this.getCurrentConfig().secretKey;
+  },
+  
+  // Get SDK URL for current environment
+  getSdkUrl() {
+    return this.getCurrentConfig().sdkUrl;
+  },
+  
+  // Get mode for current environment
+  getMode() {
+    return this.getCurrentConfig().mode;
+  },
+  
+  // Check if using demo environment
+  isDemo() {
+    return this.currentEnvironment === 'demo';
+  },
+  
+  // Get API endpoints (use combined server)
+  getEndpoints() {
+    // Use the combined server for both local and production
+    const baseUrl = process.env.NODE_ENV === 'production' 
+      ? 'https://mongodb-2-mr18.onrender.com/api'
+      : 'http://localhost:5000/api';
+    
+    return {
+      createOrder: `${baseUrl}/create-order`,
+      orderStatus: `${baseUrl}/order-status`,
+      webhook: `${baseUrl}/webhook/cashfree`
+    };
   }
 }
 

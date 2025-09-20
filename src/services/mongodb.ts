@@ -24,6 +24,8 @@ export class MongoDBService {
       uid: userData.uid!,
       email: userData.email!,
       displayName: userData.displayName || '',
+      name: userData.name || '',
+      phone: userData.phone || '',
       inrBalance: userData.inrBalance || 0,
       cryptoBalances: userData.cryptoBalances || {
         BTC: 0,
