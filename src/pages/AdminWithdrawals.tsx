@@ -25,6 +25,10 @@ interface PendingWithdrawal {
   status: string
   createdAt: any
   type: string
+  bankDetails?: {
+    accountNumber: string
+    ifscCode: string
+  }
 }
 
 const AdminWithdrawals: React.FC = () => {
@@ -169,6 +173,23 @@ const AdminWithdrawals: React.FC = () => {
 
   const executeWithdrawal = async (withdrawal: PendingWithdrawal) => {
     try {
+      if (withdrawal.type === 'crypto_to_inr') {
+        // Handle crypto-to-INR withdrawal (bank transfer)
+        await executeCryptoToInrWithdrawal(withdrawal)
+      } else if (withdrawal.type === 'inr_to_crypto') {
+        // Handle INR-to-crypto withdrawal (smart contract)
+        await executeInrToCryptoWithdrawal(withdrawal)
+      } else {
+        toast.error('Unknown withdrawal type')
+      }
+    } catch (error: any) {
+      console.error('Withdrawal execution error:', error)
+      toast.error(`Failed to execute withdrawal: ${error.message}`)
+    }
+  }
+
+  const executeCryptoToInrWithdrawal = async (withdrawal: PendingWithdrawal) => {
+    try {
       if (!web3 || !account) {
         toast.error('Please connect admin wallet first')
         return
@@ -179,7 +200,7 @@ const AdminWithdrawals: React.FC = () => {
         return
       }
 
-      toast.loading('Executing withdrawal on blockchain...', { id: 'execute-withdrawal' })
+      toast.loading('Processing crypto-to-INR withdrawal via smart contract...', { id: 'execute-withdrawal' })
 
       // Import contract ABI and config
       const { CONTRACT_CONFIG, CRYPTO_WALLET_ABI } = await import('../config/contracts')
@@ -190,7 +211,143 @@ const AdminWithdrawals: React.FC = () => {
       // Convert amount to Wei
       const amountInWei = web3.utils.toWei(withdrawal.cryptoAmount.toString(), 'ether')
       
-      console.log('Executing withdrawal:', {
+      // Admin wallet address (where crypto will be transferred)
+      const adminWalletAddress = account // Admin's connected wallet receives the crypto
+      
+      console.log('Executing crypto-to-INR withdrawal:', {
+        fromUserId: withdrawal.userId,
+        toAdminWallet: adminWalletAddress,
+        tokenAddress: withdrawal.tokenAddress,
+        amount: withdrawal.cryptoAmount,
+        amountInWei: amountInWei,
+        crypto: withdrawal.crypto,
+        bankAccount: withdrawal.bankDetails?.accountNumber
+      })
+
+      // Pre-check: ensure contract has enough token balance
+      const erc20ABI = [
+        {
+          "inputs": [{"internalType": "address", "name": "account", "type": "address"}],
+          "name": "balanceOf",
+          "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+          "stateMutability": "view" as const,
+          "type": "function" as const
+        }
+      ]
+      
+      const tokenContract = new web3.eth.Contract(erc20ABI, withdrawal.tokenAddress)
+      const contractTokenBal = await tokenContract.methods.balanceOf(CONTRACT_CONFIG.contracts.cryptoWallet).call()
+      const hasEnough = web3.utils.toBN(contractTokenBal).gte(web3.utils.toBN(amountInWei))
+      
+      if (!hasEnough) {
+        const humanBal = web3.utils.fromWei(contractTokenBal, 'ether')
+        toast.dismiss('execute-withdrawal')
+        toast.error(`Insufficient contract token balance. Available: ${humanBal} ${withdrawal.crypto}`)
+        return
+      }
+
+      // Execute the crypto transfer to admin wallet via smart contract
+      const tx = await contract.methods.executeWithdrawalTo(
+        adminWalletAddress, // Admin wallet receives the crypto
+        withdrawal.tokenAddress,
+        amountInWei
+      ).send({ from: account })
+
+      console.log('Crypto-to-INR withdrawal transaction successful:', tx)
+
+      // Import MongoDB service to update user balance
+      const { mongoDBService } = await import('../services/mongodb')
+      
+      // Deduct crypto balance from user (after successful smart contract execution)
+      await mongoDBService.updateUserBalance(
+        withdrawal.userId, 
+        withdrawal.crypto, 
+        -withdrawal.cryptoAmount
+      )
+
+      // Update withdrawal status in Firestore
+      await updateDoc(doc(db, 'pending_withdrawals', withdrawal.id), {
+        status: 'executed',
+        executedAt: new Date(),
+        executedBy: account,
+        txHash: tx.transactionHash,
+        bankTransferDetails: {
+          accountNumber: withdrawal.bankDetails?.accountNumber,
+          ifscCode: withdrawal.bankDetails?.ifscCode,
+          amount: withdrawal.inrAmount
+        },
+        cryptoTransferDetails: {
+          fromUserId: withdrawal.userId,
+          toAdminWallet: adminWalletAddress,
+          cryptoAmount: withdrawal.cryptoAmount,
+          crypto: withdrawal.crypto,
+          txHash: tx.transactionHash
+        }
+      })
+
+      // Log transaction in user's history
+      await addDoc(collection(db, 'transactions'), {
+        userId: withdrawal.userId,
+        type: 'withdrawal',
+        currency: withdrawal.crypto,
+        amount: withdrawal.cryptoAmount,
+        inrAmount: withdrawal.inrAmount,
+        status: 'completed',
+        timestamp: new Date(),
+        txHash: tx.transactionHash,
+        toAddress: adminWalletAddress,
+        description: `Crypto to INR withdrawal - ${withdrawal.cryptoAmount} ${withdrawal.crypto} transferred to admin wallet for bank transfer to ${withdrawal.bankDetails?.accountNumber}`,
+        bankDetails: withdrawal.bankDetails,
+        blockNumber: tx.blockNumber
+      })
+
+      toast.dismiss('execute-withdrawal')
+      toast.success(`Crypto-to-INR withdrawal executed! ${withdrawal.cryptoAmount} ${withdrawal.crypto} transferred to admin wallet. Transaction: ${tx.transactionHash.slice(0, 10)}...`)
+      
+      // Reload withdrawals
+      await loadPendingWithdrawals()
+
+    } catch (error: any) {
+      const msg = getRevertMessage(error)
+      console.error('Crypto-to-INR withdrawal error:', { error, message: msg })
+      toast.dismiss('execute-withdrawal')
+      
+      if (msg.includes('caller is not the owner')) {
+        toast.error('Only contract owner can execute withdrawals')
+      } else if (msg.includes('paused')) {
+        toast.error('Contract is paused. Unpause before executing.')
+      } else if (msg.includes('insufficient')) {
+        toast.error('Insufficient contract token balance')
+      } else {
+        toast.error(`Failed to execute crypto-to-INR withdrawal: ${msg}`)
+      }
+    }
+  }
+
+  const executeInrToCryptoWithdrawal = async (withdrawal: PendingWithdrawal) => {
+    try {
+      if (!web3 || !account) {
+        toast.error('Please connect admin wallet first')
+        return
+      }
+
+      if (ownerAddress && account.toLowerCase() !== ownerAddress.toLowerCase()) {
+        toast.error('Connect the contract owner wallet to execute withdrawals')
+        return
+      }
+
+      toast.loading('Executing crypto withdrawal on blockchain...', { id: 'execute-withdrawal' })
+
+      // Import contract ABI and config
+      const { CONTRACT_CONFIG, CRYPTO_WALLET_ABI } = await import('../config/contracts')
+      
+      // Create contract instance
+      const contract = new web3.eth.Contract(CRYPTO_WALLET_ABI, CONTRACT_CONFIG.contracts.cryptoWallet)
+      
+      // Convert amount to Wei
+      const amountInWei = web3.utils.toWei(withdrawal.cryptoAmount.toString(), 'ether')
+      
+      console.log('Executing crypto withdrawal:', {
         userAddress: withdrawal.userAddress,
         tokenAddress: withdrawal.tokenAddress,
         amount: withdrawal.cryptoAmount,
@@ -227,7 +384,7 @@ const AdminWithdrawals: React.FC = () => {
         amountInWei
       ).send({ from: account })
 
-      console.log('Withdrawal transaction successful:', tx)
+      console.log('Crypto withdrawal transaction successful:', tx)
 
       // Update withdrawal status in Firestore
       await updateDoc(doc(db, 'pending_withdrawals', withdrawal.id), {
@@ -254,17 +411,17 @@ const AdminWithdrawals: React.FC = () => {
 
       // IMPORTANT: Do NOT deduct INR balance here
       // INR will only be deducted when BXC is actually received by user's wallet
-      console.log('🔄 Withdrawal executed - INR will be deducted only when BXC is received by user wallet')
+      console.log('🔄 Crypto withdrawal executed - INR will be deducted only when crypto is received by user wallet')
 
       toast.dismiss('execute-withdrawal')
-      toast.success(`Withdrawal executed! Transaction: ${tx.transactionHash.slice(0, 10)}...`)
+      toast.success(`Crypto withdrawal executed! Transaction: ${tx.transactionHash.slice(0, 10)}...`)
       
       // Reload withdrawals
       await loadPendingWithdrawals()
 
     } catch (error: any) {
       const msg = getRevertMessage(error)
-      console.error('Withdrawal execution error:', { error, message: msg })
+      console.error('Crypto withdrawal execution error:', { error, message: msg })
       toast.dismiss('execute-withdrawal')
       
       if (msg.includes('caller is not the owner')) {
@@ -274,7 +431,7 @@ const AdminWithdrawals: React.FC = () => {
       } else if (msg.includes('insufficient')) {
         toast.error('Insufficient contract token balance')
       } else {
-        toast.error(`Failed to execute withdrawal: ${msg}`)
+        toast.error(`Failed to execute crypto withdrawal: ${msg}`)
       }
     }
   }
@@ -421,7 +578,7 @@ const AdminWithdrawals: React.FC = () => {
           <i className="fas fa-cog"></i> Admin Dashboard
         </h1>
         <p style={{ margin: '0 0 1rem 0', fontSize: '1.1rem' }}>
-          Process pending INR → Crypto withdrawals
+          Process pending withdrawals via smart contract (Crypto → INR & INR → Crypto)
           {ownerAddress && (
             <><br/>Contract Owner: <code>{ownerAddress}</code></>
           )}
@@ -546,7 +703,12 @@ const AdminWithdrawals: React.FC = () => {
                     alignItems: 'center',
                     marginBottom: '1rem'
                   }}>
-                    <h3 style={{ margin: 0, fontSize: '1.2rem' }}>INR → {withdrawal.crypto} Withdrawal</h3>
+                    <h3 style={{ margin: 0, fontSize: '1.2rem' }}>
+                      {withdrawal.type === 'crypto_to_inr' 
+                        ? `${withdrawal.crypto} → INR Withdrawal` 
+                        : `INR → ${withdrawal.crypto} Withdrawal`
+                      }
+                    </h3>
                           <span style={{
                       padding: '0.25rem 0.75rem',
                       borderRadius: '20px',
@@ -570,10 +732,29 @@ const AdminWithdrawals: React.FC = () => {
                       <span style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.25rem' }}>User ID</span>
                       <span style={{ fontWeight: '600', color: '#1f2937' }}>{withdrawal.userId}</span>
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <span style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.25rem' }}>User Address</span>
-                      <span style={{ fontWeight: '600', color: '#1f2937' }}>{withdrawal.userAddress}</span>
-                    </div>
+                    
+                    {withdrawal.type === 'crypto_to_inr' ? (
+                      <>
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                          <span style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.25rem' }}>Bank Account</span>
+                          <span style={{ fontWeight: '600', color: '#1f2937' }}>{withdrawal.bankDetails?.accountNumber || 'N/A'}</span>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                          <span style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.25rem' }}>IFSC Code</span>
+                          <span style={{ fontWeight: '600', color: '#1f2937' }}>{withdrawal.bankDetails?.ifscCode || 'N/A'}</span>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                          <span style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.25rem' }}>Crypto Destination</span>
+                          <span style={{ fontWeight: '600', color: '#10b981' }}>Admin Wallet ({account?.slice(0, 6)}...{account?.slice(-4)})</span>
+                        </div>
+                      </>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.25rem' }}>User Address</span>
+                        <span style={{ fontWeight: '600', color: '#1f2937' }}>{withdrawal.userAddress}</span>
+                      </div>
+                    )}
+                    
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
                       <span style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.25rem' }}>INR Amount</span>
                       <span style={{ fontWeight: '600', color: '#1f2937' }}>₹{withdrawal.inrAmount.toLocaleString()}</span>
@@ -582,10 +763,14 @@ const AdminWithdrawals: React.FC = () => {
                       <span style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.25rem' }}>Crypto Amount</span>
                       <span style={{ fontWeight: '600', color: '#1f2937' }}>{withdrawal.cryptoAmount.toFixed(8)} {withdrawal.crypto}</span>
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <span style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.25rem' }}>Token Address</span>
-                      <span style={{ fontWeight: '600', color: '#1f2937' }}>{withdrawal.tokenAddress}</span>
-                    </div>
+                    
+                    {withdrawal.type === 'inr_to_crypto' && (
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.25rem' }}>Token Address</span>
+                        <span style={{ fontWeight: '600', color: '#1f2937' }}>{withdrawal.tokenAddress}</span>
+                      </div>
+                    )}
+                    
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
                       <span style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.25rem' }}>Created At</span>
                       <span style={{ fontWeight: '600', color: '#1f2937' }}>{formattedDate}</span>
@@ -609,7 +794,8 @@ const AdminWithdrawals: React.FC = () => {
                       }}
                       title={!isOwner ? 'Connect the contract owner wallet' : 'Contract is paused'}
                     >
-                      <i className="fas fa-check"></i> Execute Withdrawal
+                      <i className="fas fa-check"></i> 
+                      {withdrawal.type === 'crypto_to_inr' ? 'Execute Crypto Transfer' : 'Execute Withdrawal'}
                         </button>
                         <button
                           onClick={() => rejectWithdrawal(withdrawal)}

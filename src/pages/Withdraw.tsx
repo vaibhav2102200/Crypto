@@ -161,27 +161,51 @@ const Withdraw: React.FC = () => {
 
     try {
       setLoading(true)
-      toast.loading('Processing INR withdrawal...', { id: 'inr-withdraw-toast' })
+      toast.loading('Processing crypto-to-INR withdrawal request...', { id: 'inr-withdraw-toast' })
 
-      const newCryptoBalance = userProfile.cryptoBalances[selectedCrypto as keyof typeof userProfile.cryptoBalances] - amount
-      await updateUserProfile({
-        cryptoBalances: {
-          ...userProfile.cryptoBalances,
-          [selectedCrypto]: newCryptoBalance
+      // Calculate INR equivalent using current crypto prices
+      const inrAmount = amount * (prices[selectedCrypto as keyof typeof prices] || 0)
+      
+      if (inrAmount <= 0) {
+        toast.dismiss('inr-withdraw-toast')
+        toast.error('Unable to calculate INR value. Please try again.')
+        setLoading(false)
+        return
+      }
+
+      // IMPORTANT: Do NOT deduct crypto balance here
+      // Crypto will only be deducted when admin processes the withdrawal
+      console.log('🔄 Crypto-to-INR withdrawal requested - crypto will be deducted only when admin processes the withdrawal')
+
+      // Create pending withdrawal request in Firestore
+      await addDoc(collection(db, 'pending_withdrawals'), {
+        userId: currentUser!.uid,
+        userAddress: '', // Not applicable for bank withdrawals
+        crypto: selectedCrypto,
+        cryptoAmount: amount,
+        inrAmount: inrAmount,
+        tokenAddress: CONTRACT_CONFIG.contracts[selectedCrypto.toLowerCase() as keyof typeof CONTRACT_CONFIG.contracts],
+        status: 'pending_admin_execution',
+        createdAt: new Date(),
+        type: 'crypto_to_inr',
+        bankDetails: {
+          accountNumber: inrWithdraw.bankAccount,
+          ifscCode: inrWithdraw.ifscCode
         }
       })
 
+      // Log transaction as pending
       await TransactionService.logTransaction({
         userId: currentUser!.uid,
         type: 'withdrawal',
-        amount,
+        amount: amount,
         currency: selectedCrypto,
-        description: `Converted ${selectedCrypto} to INR and withdrew to bank account ${inrWithdraw.bankAccount}`,
-        status: 'completed'
+        description: `Converted ${amount} ${selectedCrypto} to ₹${inrAmount.toFixed(2)} and requested withdrawal to bank account ${inrWithdraw.bankAccount}`,
+        status: 'pending'
       })
 
       toast.dismiss('inr-withdraw-toast')
-      toast.success('INR withdrawal request submitted successfully!')
+      toast.success(`Crypto-to-INR withdrawal request submitted. Admin will process the withdrawal shortly.`)
 
       setInrWithdraw({
         crypto: 'BTC',
