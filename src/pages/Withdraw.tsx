@@ -43,7 +43,7 @@ const Withdraw: React.FC = () => {
     try {
       toast.loading('Verifying bank details...', { id: 'bank-verify-toast' });
       
-      const res = await fetch("https://mongodb-2-mr18.onrender.com/api/verify-bank", {
+      const res = await fetch("https://crypto-pay-api-server.onrender.com/api/verify-bank", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -637,7 +637,7 @@ const Withdraw: React.FC = () => {
                      type="button"
                      onClick={async () => {
                        try {
-                         const res = await fetch("https://mongodb-2-mr18.onrender.com/api/verify-bank/test");
+                         const res = await fetch("https://crypto-pay-api-server.onrender.com/api/verify-bank/test");
                          const data = await res.json();
                          toast.success("API Test: " + data.message);
                          console.log("API Test Response:", data);
