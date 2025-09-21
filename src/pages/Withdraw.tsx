@@ -15,7 +15,6 @@ const Withdraw: React.FC = () => {
     amount: '',
     bankAccount: '',
     ifscCode: '',
-    accountHolderName: '',
     bankName: '',
     branchName: ''
   })
@@ -63,19 +62,23 @@ const Withdraw: React.FC = () => {
       if (data.success) {
         setInrWithdraw(prev => ({
           ...prev,
-          accountHolderName: data.accountHolderName,
           bankName: data.bankName,
           branchName: data.branchName,
         }));
         toast.success("Bank details verified successfully!");
       } else {
-        toast.error(data.message || "Bank details verification failed!");
+        // Show detailed error message from server
+        const errorMsg = data.message || data.error || "Bank details verification failed!";
+        toast.error(`Verification failed: ${errorMsg}`);
+        console.error('Bank verification failed:', data);
       }
     } catch (err: any) {
       console.error('Bank verification error:', err);
       toast.dismiss('bank-verify-toast');
       
-      if (err.message.includes('404')) {
+      if (err.message.includes('400')) {
+        toast.error("Invalid bank details. Please check your account number and IFSC code.");
+      } else if (err.message.includes('404')) {
         toast.error("Bank verification service is not available. Please check if the backend server is running.");
       } else if (err.message.includes('Failed to fetch')) {
         toast.error("Unable to connect to the server. Please check your internet connection.");
@@ -556,8 +559,8 @@ const Withdraw: React.FC = () => {
                      required
                      style={{ 
                        width: '100%',
-                       paddingRight: inrWithdraw.accountHolderName ? '2.5rem' : '1rem',
-                       border: inrWithdraw.accountHolderName ? '2px solid #10b981' : '1px solid #ddd'
+                       paddingRight: inrWithdraw.bankName ? '2.5rem' : '1rem',
+                       border: inrWithdraw.bankName ? '2px solid #10b981' : '1px solid #ddd'
                      }}
                      onBlur={async () => {
                        if (inrWithdraw.bankAccount && inrWithdraw.ifscCode) {
@@ -565,7 +568,7 @@ const Withdraw: React.FC = () => {
                        }
                      }}
                    />
-                   {inrWithdraw.accountHolderName && (
+                   {inrWithdraw.bankName && (
                      <div style={{
                        position: 'absolute',
                        right: '0.75rem',
@@ -593,8 +596,8 @@ const Withdraw: React.FC = () => {
                        required
                        style={{ 
                          width: '100%',
-                         paddingRight: inrWithdraw.accountHolderName ? '2.5rem' : '1rem',
-                         border: inrWithdraw.accountHolderName ? '2px solid #10b981' : '1px solid #ddd'
+                         paddingRight: inrWithdraw.bankName ? '2.5rem' : '1rem',
+                         border: inrWithdraw.bankName ? '2px solid #10b981' : '1px solid #ddd'
                        }}
                        onBlur={async () => {
                          if (inrWithdraw.bankAccount && inrWithdraw.ifscCode) {
@@ -602,7 +605,7 @@ const Withdraw: React.FC = () => {
                          }
                        }}
                      />
-                     {inrWithdraw.accountHolderName && (
+                     {inrWithdraw.bankName && (
                        <div style={{
                          position: 'absolute',
                          right: '0.75rem',
@@ -633,68 +636,9 @@ const Withdraw: React.FC = () => {
                    >
                      Verify
                    </button>
-                   <button
-                     type="button"
-                     onClick={async () => {
-                       try {
-                         const res = await fetch("https://crypto-pay-api-server.onrender.com/api/verify-bank/test");
-                         const data = await res.json();
-                         toast.success("API Test: " + data.message);
-                         console.log("API Test Response:", data);
-                       } catch (err) {
-                         toast.error("API Test Failed: " + err.message);
-                         console.error("API Test Error:", err);
-                       }
-                     }}
-                     style={{
-                       padding: '0.5rem 0.75rem',
-                       background: '#17a2b8',
-                       color: 'white',
-                       border: 'none',
-                       borderRadius: '6px',
-                       cursor: 'pointer',
-                       fontSize: '0.8rem',
-                       fontWeight: '500'
-                     }}
-                   >
-                     Test API
-                   </button>
                  </div>
                </div>
 
-               {/* Account Holder Name Field */}
-               <div style={{ marginBottom: '1rem' }}>
-                 <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
-                   Account Holder Name
-                 </label>
-                 <div style={{ position: 'relative' }}>
-                   <input
-                     type="text"
-                     placeholder="Account holder name will appear here"
-                     value={inrWithdraw.accountHolderName}
-                     readOnly
-                     style={{ 
-                       width: '100%',
-                       paddingRight: inrWithdraw.accountHolderName ? '2.5rem' : '1rem',
-                       background: inrWithdraw.accountHolderName ? '#f0f9ff' : '#f9f9f9',
-                       border: inrWithdraw.accountHolderName ? '2px solid #10b981' : '1px solid #ddd',
-                       color: inrWithdraw.accountHolderName ? '#065f46' : '#666'
-                     }}
-                   />
-                   {inrWithdraw.accountHolderName && (
-                     <div style={{
-                       position: 'absolute',
-                       right: '0.75rem',
-                       top: '50%',
-                       transform: 'translateY(-50%)',
-                       color: '#10b981',
-                       fontSize: '1.2rem'
-                     }}>
-                       ✓
-                     </div>
-                   )}
-                 </div>
-               </div>
 
               {/* Additional Bank Details */}
               {inrWithdraw.bankName && (
