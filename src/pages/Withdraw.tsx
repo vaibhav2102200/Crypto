@@ -70,10 +70,8 @@ const Withdraw: React.FC = () => {
         // Show detailed error message from server
         const errorMsg = data.message || data.error || "Bank details verification failed!";
         toast.error(`Verification failed: ${errorMsg}`);
-        console.error('Bank verification failed:', data);
       }
     } catch (err: any) {
-      console.error('Bank verification error:', err);
       toast.dismiss('bank-verify-toast');
       
       if (err.message.includes('400')) {
@@ -96,7 +94,6 @@ const Withdraw: React.FC = () => {
       const withdrawals = await TransactionService.getUserTransactions(currentUser.uid, 'withdrawal', 5)
       setRecentWithdrawals(withdrawals)
     } catch (error) {
-      console.error('Error loading recent withdrawals:', error)
       toast.error('Error loading recent withdrawals')
     } finally {
       setWithdrawalsLoading(false)
@@ -117,7 +114,6 @@ const Withdraw: React.FC = () => {
       if (bxcAddress === '0x3456789012345678901234567890123456789012' || 
           cryptoWalletAddress === '0x1234567890123456789012345678901234567890' ||
           !bxcAddress || !cryptoWalletAddress) {
-        console.warn('Using placeholder or missing contract addresses - showing demo balance')
         setContractBXCBalance('1000.00 (Demo)')
         return
       }
@@ -159,7 +155,6 @@ const Withdraw: React.FC = () => {
       const bxcBalanceFormatted = parseFloat(web3.utils.fromWei(bxcBalance, 'ether')).toFixed(8)
       setContractBXCBalance(bxcBalanceFormatted)
     } catch (error: any) {
-      console.warn('Contract balance check failed, using demo mode:', error.message)
       // In demo/development mode, show a placeholder balance
       setContractBXCBalance('1000.00 (Demo)')
     }
@@ -232,7 +227,6 @@ const Withdraw: React.FC = () => {
 
       // IMPORTANT: Do NOT deduct crypto balance here
       // Crypto will only be deducted when admin processes the withdrawal
-      console.log('🔄 Crypto-to-INR withdrawal requested - crypto will be deducted only when admin processes the withdrawal')
 
       // Create pending withdrawal request in Firestore
       await addDoc(collection(db, 'pending_withdrawals'), {
@@ -269,7 +263,6 @@ const Withdraw: React.FC = () => {
         amount: '',
         bankAccount: '',
         ifscCode: '',
-        accountHolderName: '',
         bankName: '',
         branchName: ''
       })
@@ -277,7 +270,6 @@ const Withdraw: React.FC = () => {
       refreshUserProfile()
       loadRecentWithdrawals()
     } catch (error: any) {
-      console.error('INR Withdrawal error:', error)
       toast.dismiss('inr-withdraw-toast')
       toast.error('Error processing INR withdrawal: ' + error.message)
     } finally {
@@ -342,7 +334,6 @@ const Withdraw: React.FC = () => {
 
       // IMPORTANT: Do NOT deduct INR balance here
       // INR will only be deducted when BXC is actually received by user's wallet
-      console.log('🔄 Crypto withdrawal requested - INR will be deducted only when crypto is received by user wallet')
 
       await addDoc(collection(db, 'pending_withdrawals'), {
         userId: currentUser!.uid,
@@ -378,7 +369,6 @@ const Withdraw: React.FC = () => {
       loadRecentWithdrawals()
       checkContractBalances()
     } catch (error: any) {
-      console.error('Crypto Withdrawal error:', error)
       toast.dismiss('crypto-withdraw-toast')
       toast.error('Error processing crypto withdrawal: ' + error.message)
     } finally {
@@ -550,259 +540,259 @@ const Withdraw: React.FC = () => {
                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
                    Bank Account Number
                  </label>
-                 <div style={{ position: 'relative' }}>
-                   <input
-                     type="text"
-                     placeholder="Enter bank account number"
-                     value={inrWithdraw.bankAccount}
-                     onChange={(e) => setInrWithdraw(prev => ({ ...prev, bankAccount: e.target.value }))}
-                     required
-                     style={{ 
-                       width: '100%',
-                       paddingRight: inrWithdraw.bankName ? '2.5rem' : '1rem',
-                       border: inrWithdraw.bankName ? '2px solid #10b981' : '1px solid #ddd'
-                     }}
-                     onBlur={async () => {
-                       if (inrWithdraw.bankAccount && inrWithdraw.ifscCode) {
-                         await verifyBankDetails();
-                       }
-                     }}
-                   />
-                   {inrWithdraw.bankName && (
-                     <div style={{
-                       position: 'absolute',
-                       right: '0.75rem',
-                       top: '50%',
-                       transform: 'translateY(-50%)',
-                       color: '#10b981',
-                       fontSize: '1.2rem'
-                     }}>
-                       ✓
-                     </div>
-                   )}
-                 </div>
+                  <div style={{ position: 'relative' }}>
+                 <input
+                   type="text"
+                   placeholder="Enter bank account number"
+                   value={inrWithdraw.bankAccount}
+                   onChange={(e) => setInrWithdraw(prev => ({ ...prev, bankAccount: e.target.value }))}
+                   required
+                      style={{ 
+                        width: '100%',
+                        paddingRight: inrWithdraw.bankName ? '2.5rem' : '1rem',
+                        border: inrWithdraw.bankName ? '2px solid #10b981' : '1px solid #ddd'
+                      }}
+                      onBlur={async () => {
+                        if (inrWithdraw.bankAccount && inrWithdraw.ifscCode) {
+                          await verifyBankDetails();
+                        }
+                      }}
+                    />
+                    {inrWithdraw.bankName && (
+                      <div style={{
+                        position: 'absolute',
+                        right: '0.75rem',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        color: '#10b981',
+                        fontSize: '1.2rem'
+                      }}>
+                        ✓
+                      </div>
+                    )}
+                  </div>
                </div>
                <div style={{ marginBottom: '1rem' }}>
                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
                    IFSC Code
                  </label>
-                 <div style={{ display: 'flex', gap: '0.5rem' }}>
-                   <div style={{ position: 'relative', flex: 1 }}>
-                     <input
-                       type="text"
-                       placeholder="Enter IFSC code"
-                       value={inrWithdraw.ifscCode}
-                       onChange={(e) => setInrWithdraw(prev => ({ ...prev, ifscCode: e.target.value }))}
-                       required
-                       style={{ 
-                         width: '100%',
-                         paddingRight: inrWithdraw.bankName ? '2.5rem' : '1rem',
-                         border: inrWithdraw.bankName ? '2px solid #10b981' : '1px solid #ddd'
-                       }}
-                       onBlur={async () => {
-                         if (inrWithdraw.bankAccount && inrWithdraw.ifscCode) {
-                           await verifyBankDetails();
-                         }
-                       }}
-                     />
-                     {inrWithdraw.bankName && (
-                       <div style={{
-                         position: 'absolute',
-                         right: '0.75rem',
-                         top: '50%',
-                         transform: 'translateY(-50%)',
-                         color: '#10b981',
-                         fontSize: '1.2rem'
-                       }}>
-                         ✓
-                       </div>
-                     )}
-                   </div>
-                   <button
-                     type="button"
-                     onClick={verifyBankDetails}
-                     disabled={!inrWithdraw.bankAccount || !inrWithdraw.ifscCode}
-                     style={{
-                       padding: '0.5rem 1rem',
-                       background: '#28a745',
-                       color: 'white',
-                       border: 'none',
-                       borderRadius: '6px',
-                       cursor: (!inrWithdraw.bankAccount || !inrWithdraw.ifscCode) ? 'not-allowed' : 'pointer',
-                       opacity: (!inrWithdraw.bankAccount || !inrWithdraw.ifscCode) ? 0.6 : 1,
-                       fontSize: '0.9rem',
-                       fontWeight: '500'
-                     }}
-                   >
-                     Verify
-                   </button>
-                 </div>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <div style={{ position: 'relative', flex: 1 }}>
+                 <input
+                   type="text"
+                   placeholder="Enter IFSC code"
+                   value={inrWithdraw.ifscCode}
+                   onChange={(e) => setInrWithdraw(prev => ({ ...prev, ifscCode: e.target.value }))}
+                   required
+                        style={{ 
+                          width: '100%',
+                          paddingRight: inrWithdraw.bankName ? '2.5rem' : '1rem',
+                          border: inrWithdraw.bankName ? '2px solid #10b981' : '1px solid #ddd'
+                        }}
+                        onBlur={async () => {
+                          if (inrWithdraw.bankAccount && inrWithdraw.ifscCode) {
+                            await verifyBankDetails();
+                          }
+                        }}
+                      />
+                      {inrWithdraw.bankName && (
+                        <div style={{
+                          position: 'absolute',
+                          right: '0.75rem',
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          color: '#10b981',
+                          fontSize: '1.2rem'
+                        }}>
+                          ✓
+                        </div>
+                      )}
                </div>
-
-
-              {/* Additional Bank Details */}
-              {inrWithdraw.bankName && (
-                <div style={{ marginBottom: '1rem', padding: '0.75rem', background: '#f0f9ff', borderRadius: '8px', border: '1px solid #0ea5e9' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                    <span style={{ fontSize: '0.9rem', fontWeight: '600', color: '#0c4a6e' }}>Bank Details Verified</span>
-                    <span style={{ color: '#10b981', fontSize: '1rem' }}>✓</span>
+                    <button
+                      type="button"
+                      onClick={verifyBankDetails}
+                      disabled={!inrWithdraw.bankAccount || !inrWithdraw.ifscCode}
+                      style={{
+                        padding: '0.5rem 1rem',
+                        background: '#28a745',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: (!inrWithdraw.bankAccount || !inrWithdraw.ifscCode) ? 'not-allowed' : 'pointer',
+                        opacity: (!inrWithdraw.bankAccount || !inrWithdraw.ifscCode) ? 0.6 : 1,
+                        fontSize: '0.9rem',
+                        fontWeight: '500'
+                      }}
+                    >
+                      Verify
+                    </button>
                   </div>
-                  <p style={{ margin: '0.25rem 0', fontSize: '0.9rem', color: '#0c4a6e' }}>
-                    <strong>Bank:</strong> {inrWithdraw.bankName}
-                  </p>
-                  <p style={{ margin: '0.25rem 0', fontSize: '0.9rem', color: '#0c4a6e' }}>
-                    <strong>Branch:</strong> {inrWithdraw.branchName}
-                  </p>
                 </div>
-              )}
-              <button
-                onClick={handleInrWithdrawal}
-                disabled={loading}
-                style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  background: '#007bff',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  fontWeight: '600',
-                  cursor: loading ? 'not-allowed' : 'pointer',
-                  opacity: loading ? 0.6 : 1
-                }}
-              >
-                {loading ? 'Processing...' : 'Withdraw INR'}
-              </button>
-            </div>
-          </div>
 
-          {/* Crypto Withdrawal */}
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '1rem' }}>
-              <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>🪙 Withdraw Cryptocurrency</h2>
-            </div>
-            <div className="card">
-              <div style={{ marginBottom: '1rem' }}>
-                <span style={{
-                  padding: '0.5rem 1rem',
-                  borderRadius: '20px',
-                  fontSize: '0.9rem',
-                  fontWeight: '500',
-                  background: isConnected ? '#d4edda' : '#f8d7da',
-                  color: isConnected ? '#155724' : '#721c24',
-                  border: `1px solid ${isConnected ? '#c3e6cb' : '#f5c6cb'}`
-                }}>
-                  {isConnected && account ? `Connected: ${account.slice(0, 6)}...${account.slice(-4)}` : 'Not Connected'}
-                </span>
-                <span style={{ marginLeft: '1rem', color: '#666' }}>{getNetworkStatus()}</span>
-                {!isConnected && (
-                  <button onClick={connectWallet} style={{ marginLeft: '1rem', background: '#007bff', color: 'white', border: 'none' }}>
-                    Connect Wallet
-                  </button>
-                )}
-              </div>
-              <p style={{ color: '#666', marginBottom: '1rem' }}>Convert INR to crypto and withdraw to external wallet</p>
-              
-              {contractBXCBalance !== null && (
-                <div style={{
-                  background: '#f0f9ff',
-                  border: '1px solid #0ea5e9',
-                  borderRadius: '8px',
-                  padding: '1rem',
-                  marginBottom: '1rem'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                    <strong style={{ color: '#0c4a6e' }}>Smart Contract Balance Required</strong>
-                  </div>
-                  <p style={{ margin: 0, color: '#0c4a6e', fontSize: '0.9rem' }}>
-                    {contractBXCBalance === 'Error' ? (
-                      <span style={{ color: '#dc2626' }}>⚠️ Error checking contract balance!</span>
-                    ) : parseFloat(contractBXCBalance) > 0 ? (
-                      <span>Contract has <strong>{contractBXCBalance} BXC tokens</strong> available.</span>
-                    ) : (
-                      <span style={{ color: '#dc2626' }}>⚠️ No BXC tokens in contract!</span>
-                    )}
-                  </p>
-                </div>
-              )}
 
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
-                  Select Cryptocurrency
-                </label>
-                <select
-                  value={cryptoWithdraw.crypto}
-                  onChange={(e) => setCryptoWithdraw(prev => ({ ...prev, crypto: e.target.value }))}
-                  required
-                  style={{ width: '100%' }}
-                >
-                  <option value="BTC">Bitcoin (BTC)</option>
-                  <option value="USDT">USDT (BEP-20)</option>
-                  <option value="BXC">BXC Token</option>
-                </select>
-              </div>
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
-                  INR Amount
-                </label>
-                <input
-                  type="number"
-                  placeholder="Enter INR amount"
-                  min="100"
-                  step="100"
-                  value={cryptoWithdraw.inrAmount}
-                  onChange={(e) => setCryptoWithdraw(prev => ({ ...prev, inrAmount: e.target.value }))}
-                  required
-                  style={{ width: '100%' }}
-                />
-                <small style={{ color: '#666' }}>{getCryptoConversionInfo()}</small>
-              </div>
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
-                  Wallet Address
-                </label>
-                <input
-                  type="text"
-                  placeholder="Enter wallet address"
-                  value={cryptoWithdraw.walletAddress}
-                  onChange={(e) => setCryptoWithdraw(prev => ({ ...prev, walletAddress: e.target.value }))}
-                  required
-                  style={{ width: '100%' }}
-                />
-                <small style={{ color: '#666' }}>Make sure the address is correct for the selected cryptocurrency</small>
-              </div>
-              <button
-                onClick={handleCryptoWithdrawal}
-                disabled={loading || !isConnected}
-                style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  background: '#007bff',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  fontWeight: '600',
-                  cursor: (loading || !isConnected) ? 'not-allowed' : 'pointer',
-                  opacity: (loading || !isConnected) ? 0.6 : 1
-                }}
-              >
-                {loading ? 'Processing...' : 'Withdraw Crypto'}
-              </button>
-            </div>
-          </div>
-        </div>
+               {/* Additional Bank Details */}
+               {inrWithdraw.bankName && (
+                 <div style={{ marginBottom: '1rem', padding: '0.75rem', background: '#f0f9ff', borderRadius: '8px', border: '1px solid #0ea5e9' }}>
+                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                     <span style={{ fontSize: '0.9rem', fontWeight: '600', color: '#0c4a6e' }}>Bank Details Verified</span>
+                     <span style={{ color: '#10b981', fontSize: '1rem' }}>✓</span>
+                   </div>
+                   <p style={{ margin: '0.25rem 0', fontSize: '0.9rem', color: '#0c4a6e' }}>
+                     <strong>Bank:</strong> {inrWithdraw.bankName}
+                   </p>
+                   <p style={{ margin: '0.25rem 0', fontSize: '0.9rem', color: '#0c4a6e' }}>
+                     <strong>Branch:</strong> {inrWithdraw.branchName}
+                   </p>
+                 </div>
+               )}
+               <button
+                 onClick={handleInrWithdrawal}
+                 disabled={loading}
+                 style={{
+                   width: '100%',
+                   padding: '0.75rem',
+                   background: '#007bff',
+                   color: 'white',
+                   border: 'none',
+                   borderRadius: '8px',
+                   fontWeight: '600',
+                   cursor: loading ? 'not-allowed' : 'pointer',
+                   opacity: loading ? 0.6 : 1
+                 }}
+               >
+                 {loading ? 'Processing...' : 'Withdraw INR'}
+               </button>
+             </div>
+           </div>
 
-        {/* Withdrawal History */}
-        <div style={{ marginTop: '3rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '1rem' }}>
-            <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>📊 Recent Withdrawals</h2>
-          </div>
-          <div className="card">
-            {renderTransactionHistory(recentWithdrawals)}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
+           {/* Crypto Withdrawal */}
+           <div>
+             <div style={{ display: 'flex', alignItems: 'center', marginBottom: '1rem' }}>
+               <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>🪙 Withdraw Cryptocurrency</h2>
+             </div>
+             <div className="card">
+               <div style={{ marginBottom: '1rem' }}>
+                 <span style={{
+                   padding: '0.5rem 1rem',
+                   borderRadius: '20px',
+                   fontSize: '0.9rem',
+                   fontWeight: '500',
+                   background: isConnected ? '#d4edda' : '#f8d7da',
+                   color: isConnected ? '#155724' : '#721c24',
+                   border: `1px solid ${isConnected ? '#c3e6cb' : '#f5c6cb'}`
+                 }}>
+                   {isConnected && account ? `Connected: ${account.slice(0, 6)}...${account.slice(-4)}` : 'Not Connected'}
+                 </span>
+                 <span style={{ marginLeft: '1rem', color: '#666' }}>{getNetworkStatus()}</span>
+                 {!isConnected && (
+                   <button onClick={connectWallet} style={{ marginLeft: '1rem', background: '#007bff', color: 'white', border: 'none' }}>
+                     Connect Wallet
+                   </button>
+                 )}
+               </div>
+               <p style={{ color: '#666', marginBottom: '1rem' }}>Convert INR to crypto and withdraw to external wallet</p>
+               
+               {contractBXCBalance !== null && (
+                 <div style={{
+                   background: '#f0f9ff',
+                   border: '1px solid #0ea5e9',
+                   borderRadius: '8px',
+                   padding: '1rem',
+                   marginBottom: '1rem'
+                 }}>
+                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                     <strong style={{ color: '#0c4a6e' }}>Smart Contract Balance Required</strong>
+                   </div>
+                   <p style={{ margin: 0, color: '#0c4a6e', fontSize: '0.9rem' }}>
+                     {contractBXCBalance === 'Error' ? (
+                       <span style={{ color: '#dc2626' }}>⚠️ Error checking contract balance!</span>
+                     ) : parseFloat(contractBXCBalance) > 0 ? (
+                       <span>Contract has <strong>{contractBXCBalance} BXC tokens</strong> available.</span>
+                     ) : (
+                       <span style={{ color: '#dc2626' }}>⚠️ No BXC tokens in contract!</span>
+                     )}
+                   </p>
+                 </div>
+               )}
 
-export default Withdraw
+               <div style={{ marginBottom: '1rem' }}>
+                 <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+                   Select Cryptocurrency
+                 </label>
+                 <select
+                   value={cryptoWithdraw.crypto}
+                   onChange={(e) => setCryptoWithdraw(prev => ({ ...prev, crypto: e.target.value }))}
+                   required
+                   style={{ width: '100%' }}
+                 >
+                   <option value="BTC">Bitcoin (BTC)</option>
+                   <option value="USDT">USDT (BEP-20)</option>
+                   <option value="BXC">BXC Token</option>
+                 </select>
+               </div>
+               <div style={{ marginBottom: '1rem' }}>
+                 <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+                   INR Amount
+                 </label>
+                 <input
+                   type="number"
+                   placeholder="Enter INR amount"
+                   min="100"
+                   step="100"
+                   value={cryptoWithdraw.inrAmount}
+                   onChange={(e) => setCryptoWithdraw(prev => ({ ...prev, inrAmount: e.target.value }))}
+                   required
+                   style={{ width: '100%' }}
+                 />
+                 <small style={{ color: '#666' }}>{getCryptoConversionInfo()}</small>
+               </div>
+               <div style={{ marginBottom: '1rem' }}>
+                 <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+                   Wallet Address
+                 </label>
+                 <input
+                   type="text"
+                   placeholder="Enter wallet address"
+                   value={cryptoWithdraw.walletAddress}
+                   onChange={(e) => setCryptoWithdraw(prev => ({ ...prev, walletAddress: e.target.value }))}
+                   required
+                   style={{ width: '100%' }}
+                 />
+                 <small style={{ color: '#666' }}>Make sure the address is correct for the selected cryptocurrency</small>
+               </div>
+               <button
+                 onClick={handleCryptoWithdrawal}
+                 disabled={loading || !isConnected}
+                 style={{
+                   width: '100%',
+                   padding: '0.75rem',
+                   background: '#007bff',
+                   color: 'white',
+                   border: 'none',
+                   borderRadius: '8px',
+                   fontWeight: '600',
+                   cursor: (loading || !isConnected) ? 'not-allowed' : 'pointer',
+                   opacity: (loading || !isConnected) ? 0.6 : 1
+                 }}
+               >
+                 {loading ? 'Processing...' : 'Withdraw Crypto'}
+               </button>
+             </div>
+           </div>
+         </div>
+
+         {/* Withdrawal History */}
+         <div style={{ marginTop: '3rem' }}>
+           <div style={{ display: 'flex', alignItems: 'center', marginBottom: '1rem' }}>
+             <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>📊 Recent Withdrawals</h2>
+           </div>
+           <div className="card">
+             {renderTransactionHistory(recentWithdrawals)}
+           </div>
+         </div>
+       </div>
+     </div>
+   )
+ }
+
+ export default Withdraw

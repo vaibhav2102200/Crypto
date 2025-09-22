@@ -18,34 +18,26 @@ export class CashfreeManager {
   private config: any
 
   constructor() {
-    console.log('CashfreeManager constructor called')
     this.config = CASHFREE_CONFIG.getCurrentConfig()
-    console.log('CashfreeManager config:', this.config)
     
     this.init().then(() => {
       this.isInitialized = true
-      console.log('CashfreeManager fully initialized')
     }).catch(error => {
-      console.error('CashfreeManager initialization failed:', error)
       this.createFallbackIntegration()
     })
   }
 
   async init() {
     try {
-      console.log('CashfreeManager init called')
       
       // Check if we're in demo mode
       if (CASHFREE_CONFIG.isDemo()) {
-        console.log('Using demo Cashfree integration...')
         await this.createDemoIntegration()
       } else {
-        console.log('Loading real Cashfree SDK...')
         await this.loadCashfreeSDK()
       }
       
     } catch (error) {
-      console.error('Cashfree initialization error:', error)
       await this.createFallbackIntegration()
     }
   }
@@ -55,7 +47,6 @@ export class CashfreeManager {
     return new Promise((resolve, reject) => {
       // Check if SDK is already loaded
       if (window.Cashfree) {
-        console.log('Cashfree SDK already loaded')
         this.cashfree = window.Cashfree({ mode: CASHFREE_CONFIG.getMode() })
         resolve(this.cashfree)
         return
@@ -65,18 +56,14 @@ export class CashfreeManager {
       const script = document.createElement('script')
       script.src = CASHFREE_CONFIG.getSdkUrl()
       script.onload = () => {
-        console.log('Cashfree SDK loaded successfully')
         try {
           this.cashfree = window.Cashfree({ mode: CASHFREE_CONFIG.getMode() })
-          console.log('Cashfree SDK initialized with mode:', CASHFREE_CONFIG.getMode())
           resolve(this.cashfree)
         } catch (error) {
-          console.error('Error initializing Cashfree SDK:', error)
           reject(error)
         }
       }
       script.onerror = () => {
-        console.error('Failed to load Cashfree SDK')
         reject(new Error('Failed to load Cashfree SDK'))
       }
       document.head.appendChild(script)

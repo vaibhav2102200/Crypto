@@ -83,7 +83,6 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
           setChainId(`0x${currentChainId.toString(16)}`)
         }
       } catch (error) {
-        console.error('Error initializing Web3:', error)
       }
     }
   }
@@ -110,7 +109,6 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
         await switchToSepolia()
       }
     } catch (error: any) {
-      console.error('Error connecting wallet:', error)
       toast.error('Failed to connect wallet')
     }
   }
@@ -148,11 +146,9 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
             ]
           })
         } catch (addError) {
-          console.error('Error adding Sepolia network:', addError)
           toast.error('Failed to add Sepolia network')
         }
       } else {
-        console.error('Error switching to Sepolia:', switchError)
         toast.error('Failed to switch to Sepolia network')
       }
     }
@@ -202,7 +198,6 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
       // Check for direct deposits to contract address
       await checkDirectDepositsToContract()
     } catch (error) {
-      console.error('Error validating balances:', error)
       // Fallback to direct token balance check
       try {
         const usdtContract = new web3.eth.Contract(ERC20_ABI, CONTRACT_CONFIG.contracts.usdt)
@@ -225,7 +220,6 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
         // Still check for direct deposits even in fallback mode
         await checkDirectDepositsToContract()
       } catch (fallbackError) {
-        console.error('Fallback balance check failed:', fallbackError)
       }
     }
   }
@@ -238,26 +232,20 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
   // Check for direct deposits to contract address
   const checkDirectDepositsToContract = async () => {
     if (!web3 || !account || !currentUser) {
-      console.log('❌ Cannot check deposits: missing web3, account, or currentUser')
       return
     }
 
     try {
-      console.log('🔍 Checking for direct deposits to contract...')
-      console.log('Current account:', account)
-      console.log('Current user:', currentUser.uid)
       
       const contractAddress = CONTRACT_CONFIG.contracts.cryptoWallet
       const usdtAddress = CONTRACT_CONFIG.contracts.usdt
       const bxcAddress = CONTRACT_CONFIG.contracts.bxc
 
-      console.log('Contract addresses:', { contractAddress, usdtAddress, bxcAddress })
 
       // Get recent blocks to check for transfers - scan more blocks for better detection
       const latestBlock = await web3.eth.getBlockNumber()
       const fromBlock = Math.max(0, latestBlock - 5000) // Check last 5000 blocks for better coverage
 
-      console.log(`Scanning blocks ${fromBlock} to ${latestBlock} (${latestBlock - fromBlock} blocks)`)
 
       // Check USDT transfers to contract
       let usdtTransfers: any[] = []
@@ -268,9 +256,7 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
           toBlock: 'latest',
           filter: { to: contractAddress }
         })
-        console.log(`Found ${usdtTransfers.length} USDT transfers to contract`)
       } catch (error) {
-        console.log('Error fetching USDT transfers:', error)
       }
 
       // Check BXC transfers to contract
@@ -282,9 +268,7 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
           toBlock: 'latest',
           filter: { to: contractAddress }
         })
-        console.log(`Found ${bxcTransfers.length} BXC transfers to contract`)
       } catch (error) {
-        console.log('Error fetching BXC transfers:', error)
       }
 
       // Check for withdrawals TO the user (from contract)
@@ -301,9 +285,7 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
             to: account.toLowerCase()
           }
         })
-        console.log(`Found ${usdtWithdrawals.length} USDT withdrawals to user`)
       } catch (error) {
-        console.log('Error fetching USDT withdrawals:', error)
       }
 
       try {
@@ -316,16 +298,9 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
             to: account.toLowerCase()
           }
         })
-        console.log(`Found ${bxcWithdrawals.length} BXC withdrawals to user`)
       } catch (error) {
-        console.log('Error fetching BXC withdrawals:', error)
       }
 
-      // Log all transfers for debugging
-      console.log('USDT transfers to contract:', usdtTransfers.map(t => ({ from: t.returnValues.from, to: t.returnValues.to, value: t.returnValues.value, txHash: t.transactionHash })))
-      console.log('BXC transfers to contract:', bxcTransfers.map(t => ({ from: t.returnValues.from, to: t.returnValues.to, value: t.returnValues.value, txHash: t.transactionHash })))
-      console.log('USDT withdrawals to user:', usdtWithdrawals.map(t => ({ from: t.returnValues.from, to: t.returnValues.to, value: t.returnValues.value, txHash: t.transactionHash })))
-      console.log('BXC withdrawals to user:', bxcWithdrawals.map(t => ({ from: t.returnValues.from, to: t.returnValues.to, value: t.returnValues.value, txHash: t.transactionHash })))
 
       // Process USDT deposits to contract
       for (const transfer of usdtTransfers) {
@@ -348,47 +323,34 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
     } catch (error) {
-      console.error('Error checking direct deposits:', error)
     }
   }
 
   // Process a direct deposit transfer
   const processDirectDeposit = async (transfer: any, tokenType: string, _tokenAddress: string) => {
     if (!web3 || !account || !currentUser) {
-      console.log('❌ Cannot process deposit: missing web3, account, or currentUser')
       return
     }
 
     try {
       const { from, to, value } = transfer.returnValues
       
-      console.log(`🔍 Processing ${tokenType} transfer:`, {
-        from: from.toLowerCase(),
-        to: to.toLowerCase(),
-        account: account.toLowerCase(),
-        contract: CONTRACT_CONFIG.contracts.cryptoWallet.toLowerCase(),
-        value: value,
-        txHash: transfer.transactionHash
-      })
       
       // Check if this transfer is from the current user to the contract
       if (from.toLowerCase() === account.toLowerCase() && to.toLowerCase() === CONTRACT_CONFIG.contracts.cryptoWallet.toLowerCase()) {
         const amount = parseFloat(web3.utils.fromWei(value, 'ether'))
         
-        console.log(`💰 Detected direct ${tokenType} deposit: ${amount} from ${from}`)
         
         // Check if this transaction was already processed
         const txHash = transfer.transactionHash
         const existingTx = await TransactionService.getTransactionByHash(currentUser.uid, txHash)
         
         if (!existingTx) {
-          console.log(`📝 Logging new ${tokenType} transaction: ${amount}`)
           
           // Log the transaction
           await logTransaction('deposit', amount, tokenType, `Direct ${tokenType} deposit to contract`, txHash)
           
           // Update user balance
-          console.log(`💳 Updating ${tokenType} balance: +${amount}`)
           await updateUserCryptoBalance(tokenType, amount)
           
           // Show notification
@@ -397,60 +359,43 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
           // Trigger balance update event
           window.dispatchEvent(new CustomEvent('balanceUpdated'))
           
-          console.log(`✅ Successfully processed ${tokenType} deposit`)
         } else {
-          console.log(`⏭️ Skipping duplicate ${tokenType} transaction: ${txHash}`)
         }
       } else {
-        console.log(`❌ Transfer not from current user or not to contract`)
       }
     } catch (error) {
-      console.error(`Error processing ${tokenType} deposit:`, error)
     }
   }
 
   // Process a withdrawal received transfer (from contract to user)
   const processWithdrawalReceived = async (transfer: any, tokenType: string, _tokenAddress: string) => {
     if (!web3 || !account || !currentUser) {
-      console.log('❌ Cannot process withdrawal: missing web3, account, or currentUser')
       return
     }
 
     try {
       const { from, to, value } = transfer.returnValues
       
-      console.log(`🔍 Processing ${tokenType} withdrawal received:`, {
-        from: from.toLowerCase(),
-        to: to.toLowerCase(),
-        account: account.toLowerCase(),
-        contract: CONTRACT_CONFIG.contracts.cryptoWallet.toLowerCase(),
-        value: value,
-        txHash: transfer.transactionHash
-      })
       
       // Check if this transfer is from the contract to the current user
       if (from.toLowerCase() === CONTRACT_CONFIG.contracts.cryptoWallet.toLowerCase() && to.toLowerCase() === account.toLowerCase()) {
         const amount = parseFloat(web3.utils.fromWei(value, 'ether'))
         
-        console.log(`💰 Detected ${tokenType} withdrawal received: ${amount} to ${to}`)
         
         // Check if this transaction was already processed
         const txHash = transfer.transactionHash
         const existingTx = await TransactionService.getTransactionByHash(currentUser.uid, txHash)
         
         if (!existingTx) {
-          console.log(`📝 Logging new ${tokenType} withdrawal received: ${amount}`)
           
           // Log the transaction
           await logTransaction('receive', amount, tokenType, `Withdrawal received: ${tokenType} from admin`, txHash)
           
           // IMPORTANT: For BXC withdrawals, deduct INR balance when BXC is received
           if (tokenType === 'BXC') {
-            console.log(`💳 BXC received - deducting INR balance`)
             await deductInrForBxcWithdrawal(amount, txHash)
             
             // IMPORTANT: Update BXC balance in dashboard when BXC is received
-            console.log(`💳 Updating BXC balance: +${amount}`)
             await updateUserCryptoBalance(tokenType, amount)
           }
           
@@ -460,15 +405,11 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
           // Trigger balance update event
           window.dispatchEvent(new CustomEvent('balanceUpdated'))
           
-          console.log(`✅ Successfully processed ${tokenType} withdrawal received`)
         } else {
-          console.log(`⏭️ Skipping duplicate ${tokenType} withdrawal transaction: ${txHash}`)
         }
       } else {
-        console.log(`❌ Transfer not from contract or not to current user`)
       }
     } catch (error) {
-      console.error(`Error processing ${tokenType} withdrawal received:`, error)
     }
   }
 
@@ -480,7 +421,6 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
       // Get current user profile
       const currentProfile = await mongoDBService.getUserByUid(currentUser.uid)
       if (!currentProfile) {
-        console.error('User profile not found')
         return
       }
 
@@ -494,13 +434,11 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
         inrBalance: newInrBalance
       })
 
-      console.log(`✅ Deducted INR ${inrToDeduct} for BXC withdrawal ${bxcAmount}. New INR balance: ${newInrBalance}`)
       
       // Log the INR deduction transaction
       await logTransaction('withdrawal', inrToDeduct, 'INR', `INR deducted for BXC withdrawal received`, txHash)
       
     } catch (error) {
-      console.error('Error deducting INR for BXC withdrawal:', error)
     }
   }
 
@@ -508,14 +446,12 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
   const startTransactionMonitoring = () => {
     if (!web3 || !account || !currentUser) return
 
-    console.log('🚀 Starting transaction monitoring...')
     
     // Check for deposits every 30 seconds
     const monitoringInterval = setInterval(async () => {
       try {
         await checkDirectDepositsToContract()
       } catch (error) {
-        console.error('Transaction monitoring error:', error)
       }
     }, 30000)
 
@@ -528,39 +464,27 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
     if ((window as any).transactionMonitoringInterval) {
       clearInterval((window as any).transactionMonitoringInterval)
       ;(window as any).transactionMonitoringInterval = null
-      console.log('🛑 Stopped transaction monitoring')
     }
   }
 
   // Manual transaction detection by transaction hash (for debugging)
   const detectTransactionByHash = async (txHash: string) => {
     if (!web3 || !account || !currentUser) {
-      console.log('❌ Cannot detect transaction: missing web3, account, or currentUser')
       return
     }
 
     try {
-      console.log(`🔍 Manually detecting transaction: ${txHash}`)
       
       // Get transaction details
       const tx = await web3.eth.getTransaction(txHash)
       const txReceipt = await web3.eth.getTransactionReceipt(txHash)
       
-      console.log('Transaction details:', {
-        from: tx.from,
-        to: tx.to,
-        value: tx.value,
-        blockNumber: tx.blockNumber,
-        status: txReceipt.status
-      })
 
       // Check if this is a token transfer
       if (tx.to && tx.to.toLowerCase() === CONTRACT_CONFIG.contracts.cryptoWallet.toLowerCase()) {
-        console.log('✅ Transaction is to contract address')
         
         // Get transaction logs to find Transfer events
         const logs = txReceipt.logs
-        console.log('Transaction logs:', logs)
         
         for (const log of logs) {
           // Check if this is a Transfer event
@@ -569,25 +493,16 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
             const to = '0x' + log.topics[2].slice(26)
             const value = web3.utils.hexToNumberString(log.data)
             
-            console.log('Transfer event found:', {
-              from: from.toLowerCase(),
-              to: to.toLowerCase(),
-              value: value,
-              account: account.toLowerCase(),
-              contract: CONTRACT_CONFIG.contracts.cryptoWallet.toLowerCase()
-            })
             
             // Check if this transfer is from the current user to the contract
             if (from.toLowerCase() === account.toLowerCase() && 
                 to.toLowerCase() === CONTRACT_CONFIG.contracts.cryptoWallet.toLowerCase()) {
               
               const amount = parseFloat(web3.utils.fromWei(value, 'ether'))
-              console.log(`💰 Found direct deposit: ${amount} tokens`)
               
               // Check if already processed
               const existingTx = await TransactionService.getTransactionByHash(currentUser.uid, txHash)
               if (!existingTx) {
-                console.log('📝 Processing new transaction...')
                 
                 // Determine token type by contract address
                 let tokenType = 'UNKNOWN'
@@ -610,21 +525,16 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
                   // Trigger balance update event
                   window.dispatchEvent(new CustomEvent('balanceUpdated'))
                   
-                  console.log(`✅ Successfully processed ${tokenType} deposit`)
                 } else {
-                  console.log('❌ Unknown token type')
                 }
               } else {
-                console.log('⏭️ Transaction already processed')
               }
             }
           }
         }
       } else {
-        console.log('❌ Transaction is not to contract address')
       }
     } catch (error) {
-      console.error('Error detecting transaction by hash:', error)
     }
   }
 
@@ -635,7 +545,6 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
       // Get current user profile to access existing balances
       const currentProfile = await mongoDBService.getUserByUid(currentUser.uid)
       if (!currentProfile) {
-        console.error('User profile not found')
         return
       }
 
@@ -652,9 +561,7 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
         cryptoBalances: updatedBalances
       })
 
-      console.log(`✅ Updated ${currency} balance: ${currentBalances[currency as keyof typeof currentBalances]} + ${amountToAdd} = ${updatedBalances[currency as keyof typeof updatedBalances]}`)
     } catch (error) {
-      console.error('Error updating crypto balance:', error)
     }
   }
 
@@ -677,9 +584,7 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
         status: 'completed',
         txHash
       })
-      console.log('Transaction logged:', { type, amount, currency, description, txHash })
     } catch (error) {
-      console.error('Error logging transaction:', error)
     }
   }
 
@@ -700,14 +605,12 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
       if (parseInt(currentAllowance) < parseInt(amountWei)) {
         // Approve the contract to spend tokens
         const approveTx = await tokenContract.methods.approve(CONTRACT_CONFIG.contracts.cryptoWallet, amountWei).send({ from: account })
-        console.log('Approval transaction:', approveTx.transactionHash)
       }
 
       // Deposit tokens to contract
       const depositTx = await contract.methods.depositCrypto(tokenAddress, amountWei).send({ from: account })
       return depositTx.transactionHash
     } catch (error: any) {
-      console.error('Deposit error:', error)
       throw new Error(`Deposit failed: ${error.message}`)
     }
   }
@@ -722,7 +625,6 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
       const withdrawTx = await contract.methods.withdrawCrypto(tokenAddress, amountWei).send({ from: account })
       return withdrawTx.transactionHash
     } catch (error: any) {
-      console.error('Withdraw error:', error)
       throw new Error(`Withdraw failed: ${error.message}`)
     }
   }
@@ -737,7 +639,6 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
       const transferTx = await contract.methods.transferCrypto(recipient, tokenAddress, amountWei).send({ from: account })
       return transferTx.transactionHash
     } catch (error: any) {
-      console.error('Transfer error:', error)
       throw new Error(`Transfer failed: ${error.message}`)
     }
   }
@@ -752,7 +653,6 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
       const withdrawalTx = await contract.methods.executeWithdrawalTo(recipient, tokenAddress, amountWei).send({ from: account })
       return withdrawalTx.transactionHash
     } catch (error: any) {
-      console.error('Withdrawal execution error:', error)
       throw new Error(`Withdrawal execution failed: ${error.message}`)
     }
   }
@@ -772,7 +672,6 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
         bxcAddress: info.bxcAddress
       }
     } catch (error: any) {
-      console.error('Get contract info error:', error)
       throw new Error(`Failed to get contract info: ${error.message}`)
     }
   }
@@ -786,7 +685,6 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
       const paused = await contract.methods.paused().call()
       return paused
     } catch (error: any) {
-      console.error('Check paused status error:', error)
       return false
     }
   }
@@ -829,16 +727,12 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
     if (typeof window !== 'undefined') {
       (window as any).detectTransactionByHash = detectTransactionByHash
       ;(window as any).checkDirectDepositsToContract = checkDirectDepositsToContract
-      console.log('🔧 Debug functions available:')
-      console.log('- window.detectTransactionByHash(txHash)')
-      console.log('- window.checkDirectDepositsToContract()')
     }
   }, [])
 
   // Start monitoring when user connects and has account
   useEffect(() => {
     if (isConnected && account && currentUser) {
-      console.log('🚀 User connected, starting transaction monitoring...')
       // Start monitoring after a short delay to ensure everything is initialized
       const timer = setTimeout(() => {
         startTransactionMonitoring()
@@ -853,7 +747,6 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
   // Also check when wallet connects
   useEffect(() => {
     if (isConnected && account && currentUser) {
-      console.log('🔍 Wallet connected, checking for deposits immediately...')
       // Immediate check when wallet connects
       const immediateTimer = setTimeout(() => {
         checkDirectDepositsToContract()

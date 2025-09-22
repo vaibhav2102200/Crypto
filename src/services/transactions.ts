@@ -37,7 +37,6 @@ export class TransactionService {
       const result = await mongoDBService.createTransaction(mongoTransaction)
       return result._id?.toString() || ''
     } catch (error) {
-      console.error('Error logging transaction:', error)
       throw error
     }
   }
@@ -68,7 +67,6 @@ export class TransactionService {
         paymentId: mongoTx.paymentId
       }))
     } catch (error) {
-      console.error('Error fetching transactions:', error)
       // Return empty array instead of throwing to prevent app crash
       return []
     }
@@ -98,7 +96,6 @@ export class TransactionService {
       const transactions = await this.getUserTransactions(userId)
       return transactions.find(tx => tx.txHash === txHash) || null
     } catch (error) {
-      console.error('Error fetching transaction by hash:', error)
       return null
     }
   }

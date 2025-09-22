@@ -103,7 +103,12 @@ const AdminWithdrawals: React.FC = () => {
   const loadContractOwner = async () => {
     try {
       if (web3 && isConnected) {
-        setOwnerAddress('0x76b16F59Cfab5DdaE5D149BE98E5d755F939572A')
+        // Multiple admin addresses
+        const adminAddresses = [
+          '0x76b16F59Cfab5DdaE5D149BE98E5d755F939572A',
+          '0xDA2D9bAf72B034cF466fDd5bB2F3cb24164a62FC'
+        ]
+        setOwnerAddress(adminAddresses[0]) // Set first one as primary for display
       }
     } catch (e) {
       console.error('Failed to load contract owner:', e)
@@ -195,8 +200,15 @@ const AdminWithdrawals: React.FC = () => {
         return
       }
 
-      if (ownerAddress && account.toLowerCase() !== ownerAddress.toLowerCase()) {
-        toast.error('Connect the contract owner wallet to execute withdrawals')
+      // Check if connected wallet is one of the admin addresses
+      const adminAddresses = [
+        '0x76b16F59Cfab5DdaE5D149BE98E5d755F939572A',
+        '0xDA2D9bAf72B034cF466fDd5bB2F3cb24164a62FC'
+      ]
+      const isAdminWallet = adminAddresses.some(addr => addr.toLowerCase() === account.toLowerCase())
+      
+      if (!isAdminWallet) {
+        toast.error('Connect an admin wallet to execute withdrawals')
         return
       }
 
@@ -331,8 +343,15 @@ const AdminWithdrawals: React.FC = () => {
         return
       }
 
-      if (ownerAddress && account.toLowerCase() !== ownerAddress.toLowerCase()) {
-        toast.error('Connect the contract owner wallet to execute withdrawals')
+      // Check if connected wallet is one of the admin addresses
+      const adminAddresses = [
+        '0x76b16F59Cfab5DdaE5D149BE98E5d755F939572A',
+        '0xDA2D9bAf72B034cF466fDd5bB2F3cb24164a62FC'
+      ]
+      const isAdminWallet = adminAddresses.some(addr => addr.toLowerCase() === account.toLowerCase())
+      
+      if (!isAdminWallet) {
+        toast.error('Connect an admin wallet to execute withdrawals')
         return
       }
 
@@ -579,9 +598,7 @@ const AdminWithdrawals: React.FC = () => {
         </h1>
         <p style={{ margin: '0 0 1rem 0', fontSize: '1.1rem' }}>
           Process pending withdrawals via smart contract (Crypto → INR & INR → Crypto)
-          {ownerAddress && (
-            <><br/>Contract Owner: <code>{ownerAddress}</code></>
-          )}
+          <><br/>Admin Addresses: <code>0x76b16F59Cfab5DdaE5D149BE98E5d755F939572A</code>, <code>0xDA2D9bAf72B034cF466fDd5bB2F3cb24164a62FC</code></>
         </p>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
@@ -651,11 +668,19 @@ const AdminWithdrawals: React.FC = () => {
             </button>
           )}
         </div>
-        {ownerAddress && account && account.toLowerCase() !== ownerAddress.toLowerCase() && (
-          <div style={{ marginTop: '0.5rem', color: '#dc3545', fontSize: '0.9rem' }}>
-            ⚠️ Connected wallet is NOT the contract owner. Execution will fail.
-          </div>
-        )}
+        {(() => {
+          const adminAddresses = [
+            '0x76b16F59Cfab5DdaE5D149BE98E5d755F939572A',
+            '0xDA2D9bAf72B034cF466fDd5bB2F3cb24164a62FC'
+          ]
+          const isAdminWallet = account && adminAddresses.some(addr => addr.toLowerCase() === account.toLowerCase())
+          
+          return !isAdminWallet && account && (
+            <div style={{ marginTop: '0.5rem', color: '#dc3545', fontSize: '0.9rem' }}>
+              ⚠️ Connected wallet is NOT an admin wallet. Execution will fail.
+            </div>
+          )
+        })()}
           </div>
 
       {/* Pending Withdrawals - Exact match to HTML */}
@@ -685,8 +710,12 @@ const AdminWithdrawals: React.FC = () => {
             {pendingWithdrawals.map((withdrawal) => {
               const createdAt = withdrawal.createdAt?.toDate?.() || new Date()
               const formattedDate = createdAt.toLocaleString()
-              const isOwner = ownerAddress && account && (ownerAddress.toLowerCase() === account.toLowerCase())
-              const shouldDisable = (supportsPausedCheck && isPaused) || !isOwner
+              const adminAddresses = [
+                '0x76b16F59Cfab5DdaE5D149BE98E5d755F939572A',
+                '0xDA2D9bAf72B034cF466fDd5bB2F3cb24164a62FC'
+              ]
+              const isAdminWallet = account && adminAddresses.some(addr => addr.toLowerCase() === account.toLowerCase())
+              const shouldDisable = (supportsPausedCheck && isPaused) || !isAdminWallet
               
               return (
                 <div key={withdrawal.id} style={{
@@ -792,7 +821,7 @@ const AdminWithdrawals: React.FC = () => {
                         transition: 'background 0.2s',
                         opacity: shouldDisable ? 0.6 : 1
                       }}
-                      title={!isOwner ? 'Connect the contract owner wallet' : 'Contract is paused'}
+                      title={!isAdminWallet ? 'Connect an admin wallet' : 'Contract is paused'}
                     >
                       <i className="fas fa-check"></i> 
                       {withdrawal.type === 'crypto_to_inr' ? 'Execute Crypto Transfer' : 'Execute Withdrawal'}
